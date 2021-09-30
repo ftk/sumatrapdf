@@ -1196,6 +1196,12 @@ ByteSlice EngineCbx::GetImageData(int pageNo) {
     CrashIf((pageNo < 1) || (pageNo > PageCount()));
     if(!images[pageNo - 1].empty())
         return images[pageNo - 1];
+    // unload previous pages
+    if(pageNo > 5 && !images[pageNo - 6].empty())
+    {
+        str::Free(images[pageNo - 6]);
+        images[pageNo - 6] = {};
+    }
     // decompress image data
     size_t fileId = files[pageNo - 1]->fileId;
     return images[pageNo - 1] = cbxFile->GetFileDataById(fileId);
