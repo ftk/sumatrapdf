@@ -2963,7 +2963,7 @@ static void OnMenuOpen(WindowInfo* win) {
     }
 }
 
-static void BrowseFolder(WindowInfo* win, bool forward) {
+void BrowseFolder(WindowInfo* win, bool forward) {
     CrashIf(win->IsAboutWindow());
     if (win->IsAboutWindow()) {
         return;

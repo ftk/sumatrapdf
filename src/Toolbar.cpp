@@ -166,11 +166,6 @@ static bool IsToolbarButtonEnabled(WindowInfo* win, int buttonNo) {
             // TODO: Update on whether there's more to find, not just on whether there is text.
             return win::GetTextLen(win->hwndFindBox) > 0;
 
-        case CmdGoToNextPage:
-            return win->ctrl->CurrentPageNo() < win->ctrl->PageCount();
-        case CmdGoToPrevPage:
-            return win->ctrl->CurrentPageNo() > 1;
-
         default:
             return true;
     }

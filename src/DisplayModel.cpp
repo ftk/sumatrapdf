@@ -62,6 +62,7 @@
 #include "TextSearch.h"
 
 #include "utils/Log.h"
+#include "SumatraPDF.h"
 
 // if true, we pre-render the pages right before and after the visible pages
 static bool gPredictiveRender = true;
@@ -1353,6 +1354,10 @@ bool DisplayModel::GoToNextPage() {
     int firstPageInNewRow = FirstPageInARowNo(currPageNo + columns, columns, IsBookView(GetDisplayMode()));
     if (firstPageInNewRow > PageCount()) {
         /* we're on a last row or after it, can't go any further */
+        auto win = FindWindowInfoByFile(this->engine->FileName(), true);
+        if (win) {
+            BrowseFolder(win, true);
+        }
         return false;
     }
     GoToPage(firstPageInNewRow, false);
@@ -1380,6 +1385,10 @@ bool DisplayModel::GoToPrevPage(int scrollY) {
     int firstPageInNewRow = FirstPageInARowNo(currPageNo - columns, columns, IsBookView(GetDisplayMode()));
     if (firstPageInNewRow < 1 || 1 == currPageNo) {
         /* we're on a first page, can't go back */
+        auto win = FindWindowInfoByFile(this->engine->FileName(), true);
+        if (win) {
+            BrowseFolder(win, false);
+        }
         return false;
     }
 
