@@ -42,12 +42,11 @@
   To draw we calculate which part of each page overlaps draw area, we render
   those pages to a bitmap and display those bitmaps.
 */
+
 #include "utils/BaseUtil.h"
 #include "utils/WinUtil.h"
 #include "utils/ScopedWin.h"
 #include "utils/Timer.h"
-#include "utils/DirIter.h"
-#include "utils/FileUtil.h"
 
 #include "wingui/TreeModel.h"
 #include "DisplayMode.h"
@@ -63,7 +62,6 @@
 #include "TextSearch.h"
 
 #include "utils/Log.h"
-#include "SumatraPDF.h"
 
 // if true, we pre-render the pages right before and after the visible pages
 static bool gPredictiveRender = true;
@@ -1355,29 +1353,6 @@ bool DisplayModel::GoToNextPage() {
     int firstPageInNewRow = FirstPageInARowNo(currPageNo + columns, columns, IsBookView(GetDisplayMode()));
     if (firstPageInNewRow > PageCount()) {
         /* we're on a last row or after it, can't go any further */
-        VecStr files;
-        auto currentFile = ToUtf8Temp(this->engine->FileName());
-        //logf("Current dir: %s\n", ToUtf8Temp(path::GetDir(this->engine->FileName())).Get());
-
-        if(CollectFilesFromDirectory(ToUtf8Temp(path::GetDir(this->engine->FileName())), files, [](std::string_view file) -> bool {
-            return true;
-        })) {
-            // todo: sort
-            str::Str nextfile;
-            for(int i = 0; i < files.Size(); i++) {
-                if(files.at(i) == currentFile && i + 1 < files.Size())
-                {
-                    nextfile = files.at(i+1);
-                    break;
-                }
-            }
-            if(nextfile.IsEmpty())
-                return false;
-            logf("Next file: %s\n", nextfile.Get());
-            auto win = FindWindowInfoByFile(this->engine->FileName(), false);
-            LoadArgs args(strconv::Utf8ToWstr(nextfile.Get()), win);
-            LoadDocument(args);
-        }
         return false;
     }
     GoToPage(firstPageInNewRow, false);
