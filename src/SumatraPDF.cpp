@@ -2994,6 +2994,8 @@ void BrowseFolder(WindowInfo* win, bool forward) {
     if (!files.Contains(tab->filePath)) {
         files.Append(str::Dup(tab->filePath));
     }
+    if(files.size() <= 1)
+        return;
     files.SortNatural();
 
     int index = files.Find(tab->filePath);
