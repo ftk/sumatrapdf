@@ -372,7 +372,7 @@ void EngineImages::DropPage(ImagePage* page, bool forceRemove) {
 // Get content box for image by cropping out margins of similar color
 RectF EngineImages::PageContentBox(int pageNo, RenderTarget target) {
     // try to load bitmap for the image
-    auto page = GetPage(pageNo, true);
+    auto page = GetPage(pageNo, false);
     if (!page)
         return RectF{};
     defer {

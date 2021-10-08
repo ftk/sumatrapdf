@@ -237,7 +237,7 @@ void DisplayModel::GetDisplayState(FileState* fs) {
 }
 
 SizeF DisplayModel::PageSizeAfterRotation(int pageNo, bool fitToContent) const {
-    PageInfo* pageInfo = GetPageDimensions(pageNo);
+    PageInfo* pageInfo = GetPageDimensions(pageNo, fitToContent);
     CrashIf(!pageInfo);
 
     if (fitToContent && pageInfo->contentBox.IsEmpty()) {
@@ -323,7 +323,7 @@ PageInfo* DisplayModel::GetPageInfo(int pageNo) const {
     return &(pagesInfo[pageNo - 1]);
 }
 
-PageInfo* DisplayModel::GetPageDimensions(int pageNo) const {
+PageInfo* DisplayModel::GetPageDimensions(int pageNo, bool content) const {
     PageInfo * info = GetPageInfo(pageNo);
     if (info->page.IsEmpty()) {
         info->page = engine->PageMediabox(pageNo);
@@ -337,7 +337,7 @@ PageInfo* DisplayModel::GetPageDimensions(int pageNo) const {
             }
         }
     }
-    if (info->contentBox.IsEmpty()) {
+    if (content && info->contentBox.IsEmpty()) {
         info->contentBox = engine->PageContentBox(pageNo);
     }
     return info;
@@ -486,12 +486,12 @@ float DisplayModel::ZoomRealFromVirtualForPage(float zoomVirtual, int pageNo) co
         int last = LastPageInARowNo(pageNo, columns, IsBookView(GetDisplayMode()), PageCount());
         RectF box;
         for (int i = first; i <= last; i++) {
-            PageInfo* pageInfo = GetPageDimensions(i);
+            PageInfo* pageInfo = GetPageDimensions(i, fitToContent);
 
             RectF pageBox = engine->Transform(pageInfo->page, i, 1.0, rotation);
-            RectF contentBox = engine->Transform(pageInfo->contentBox, i, 1.0, rotation);
-            if (pageInfo->contentBox.IsEmpty()) {
-                contentBox = pageBox;
+            RectF contentBox = pageBox;
+            if (!pageInfo->contentBox.IsEmpty()) {
+                contentBox = engine->Transform(pageInfo->contentBox, i, 1.0, rotation);
             }
 
             contentBox.x += row.dx;
@@ -1163,7 +1163,7 @@ void DisplayModel::SetViewPortSize(Size newViewPortSize) {
 }
 
 RectF DisplayModel::GetContentBox(int pageNo) const {
-    PageInfo* pageInfo = GetPageDimensions(pageNo);
+    PageInfo* pageInfo = GetPageDimensions(pageNo, true);
     RectF cbox = pageInfo->contentBox;
     if(cbox.IsEmpty())
         return cbox;
