@@ -143,9 +143,7 @@ struct DisplayModel : Controller {
     [[nodiscard]] bool NeedHScroll() const;
     [[nodiscard]] bool NeedVScroll() const;
     [[nodiscard]] bool CanScrollRight() const;
-    ;
     [[nodiscard]] bool CanScrollLeft() const;
-    ;
     [[nodiscard]] Size GetCanvasSize() const;
 
     [[nodiscard]] bool PageShown(int pageNo) const;
