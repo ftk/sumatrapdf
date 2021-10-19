@@ -146,7 +146,11 @@ RectF EngineImages::PageMediabox(int pageNo) {
     ImagePageInfo* pi = pages[n];
     RectF& mbox = pi->mediabox;
     if (mbox.IsEmpty()) {
-        mbox = LoadMediabox(pageNo);
+        EnterCriticalSection(&cacheAccess);
+        if (mbox.IsEmpty())
+            mbox = LoadMediabox(pageNo);
+        LeaveCriticalSection(&cacheAccess);
+
     }
     return mbox;
 }
