@@ -43,8 +43,6 @@
   those pages to a bitmap and display those bitmaps.
 */
 
-#include <mutex>
-#include <thread>
 #include "utils/BaseUtil.h"
 #include "utils/WinUtil.h"
 #include "utils/ScopedWin.h"
@@ -1107,10 +1105,6 @@ void DisplayModel::RenderVisibleParts() {
         return;
     }
 
-    std::thread{[this, firstVisiblePage, lastVisiblePage](){
-    static std::mutex m;
-    std::lock_guard<std::mutex> _{m};
-
     // rendering happens LIFO except if the queue is currently
     // empty, so request the visible pages first and last to
     // make sure they're rendered before the predicted pages
@@ -1145,7 +1139,6 @@ void DisplayModel::RenderVisibleParts() {
     for (int pageNo = lastVisiblePage; pageNo >= firstVisiblePage; pageNo--) {
         cb->RequestRendering(pageNo);
     }
-    }}.detach();
 }
 
 void DisplayModel::SetViewPortSize(Size newViewPortSize) {
