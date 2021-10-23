@@ -626,10 +626,6 @@ static INT_PTR CALLBACK Dialog_Settings_Proc(HWND hDlg, UINT msg, WPARAM wp, LPA
             if (IsExeAssociatedWithPdfExtension()) {
                 SetDlgItemText(hDlg, IDC_SET_DEFAULT_READER, _TR("SumatraPDF is your default PDF reader"));
                 EnableWindow(GetDlgItem(hDlg, IDC_SET_DEFAULT_READER), FALSE);
-            } else if (IsRunningInPortableMode()) {
-                SetDlgItemText(hDlg, IDC_SET_DEFAULT_READER,
-                               _TR("Default PDF reader can't be changed in portable mode"));
-                EnableWindow(GetDlgItem(hDlg, IDC_SET_DEFAULT_READER), FALSE);
             } else {
                 SetDlgItemText(hDlg, IDC_SET_DEFAULT_READER, _TR("Make SumatraPDF my default PDF reader"));
                 EnableWindow(GetDlgItem(hDlg, IDC_SET_DEFAULT_READER), HasPermission(Perm::RegistryAccess));

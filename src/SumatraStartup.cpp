@@ -480,7 +480,7 @@ Error:
 // Registering happens either through the Installer or the Options dialog;
 // here we just make sure that we're still registered
 static bool RegisterForPdfExtentions(HWND hwnd) {
-    if (IsRunningInPortableMode() || !HasPermission(Perm::RegistryAccess) || gPluginMode) {
+    if (!HasPermission(Perm::RegistryAccess) || gPluginMode) {
         return false;
     }
 
