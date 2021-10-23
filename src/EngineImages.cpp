@@ -166,6 +166,10 @@ RenderedBitmap* EngineImages::RenderPage(RenderPageArgs& args) {
         return nullptr;
     }
 
+    if (pageNo+1 <= PageCount()) {
+        DropPage(GetPage(pageNo + 1), false);
+    }
+
     auto timeStart = TimeGet();
     defer {
         auto dur = TimeSinceInMs(timeStart);
