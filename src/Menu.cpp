@@ -161,7 +161,7 @@ static MenuDef menuDefFile[] = {
         CmdSaveAs,
     },
     {
-        _TRN("Save Annotations"),
+        _TRN("Save Annotations to existing PDF"),
         CmdSaveAnnotations,
     },
 //[ ACCESSKEY_ALTERNATIVE // only one of these two will be shown
@@ -660,7 +660,7 @@ static MenuDef menuDefCreateAnnotFromSelection[] = {
         CmdCreateAnnotHighlight,
     },
     {
-        _TRN("&Underline"),
+        _TRN("&Underline\tu"),
         CmdCreateAnnotUnderline,
     },
     {
@@ -767,6 +767,10 @@ static MenuDef menuDefContext[] = {
         CmdSelectAnnotation,
     },
     {
+        _TRN("Delete Annotation\tDel"),
+        CmdDeleteAnnotation,
+    },
+    {
         _TRN("Edit Annotations"),
         CmdEditAnnotations,
     },
@@ -779,7 +783,7 @@ static MenuDef menuDefContext[] = {
         (UINT_PTR)menuDefCreateAnnotUnderCursor,
     },
     {
-        _TRN("Save Annotations"),
+        _TRN("Save Annotations to existing PDF"),
         CmdSaveAnnotations,
     },
     {
@@ -947,6 +951,7 @@ static UINT_PTR removeIfNoDiskAccessPerm[] = {
     CmdFavoriteToggle,
     CmdSaveAnnotations,
     CmdSelectAnnotation,
+    CmdDeleteAnnotation,
     CmdEditAnnotations,
     CmdOpenSelectedDocument,
     CmdPinSelectedDocument,
@@ -960,6 +965,7 @@ static UINT_PTR removeIfAnnotsNotSupported[] = {
     CmdSaveAnnotations,
     CmdSelectAnnotation,
     CmdEditAnnotations,
+    CmdDeleteAnnotation,
     (UINT_PTR)menuDefCreateAnnotFromSelection,
     (UINT_PTR)menuDefCreateAnnotUnderCursor,
 };
@@ -1008,6 +1014,28 @@ static void AddFileMenuItem(HMENU menuFile, const WCHAR* filePath, int index) {
 
     AutoFreeWstr menuString;
     menuString.SetCopy(path::GetBaseNameTemp(filePath));
+
+    // If the name is too long, save only the ends glued together
+    // E.g. 'Very Long PDF Name (3).pdf' -> 'Very Long...e (3).pdf'
+    const UINT MAX_LEN = 70;
+    if (menuString.size() > MAX_LEN) {
+        WCHAR* tmpStr = menuString.Get();
+        WCHAR* newStr = AllocArray<WCHAR>(MAX_LEN);
+        const UINT half = MAX_LEN / 2;
+        const UINT strSize = menuString.size() + 1; // size()+1 because wcslen() doesn't include \0
+        // Copy first N/2 characters, move last N/2 characters to the halfway point
+        for (UINT i = 0; i < half; i++) {
+            newStr[i] = tmpStr[i];
+            newStr[i + half] = tmpStr[strSize - half + i];
+        }
+        // Add ellipsis
+        newStr[half - 2] = newStr[half - 1] = newStr[half] = '.';
+        // Ensure null-terminated string
+        newStr[MAX_LEN - 1] = '\0';
+        // Save truncated string
+        menuString.Set(newStr);
+    }
+
     auto fileName = win::menu::ToSafeString(menuString);
     int menuIdx = (int)((index + 1) % 10);
     menuString.Set(str::Format(L"&%d) %s", menuIdx, fileName));
@@ -1233,6 +1261,12 @@ HMENU BuildMenuFromMenuDef(MenuDef* menuDef, HMENU menu, BuildMenuCtx* ctx) {
         if (!HasPermission(Perm::PrinterAccess)) {
             removeMenu |= (cmdId == CmdPrint);
         }
+        if (!HasPermission(Perm::DiskAccess)) {
+            removeMenu |= cmdIdInList(removeIfNoDiskAccessPerm);
+        }
+        if (!HasPermission(Perm::CopySelection)) {
+            removeMenu |= cmdIdInList(removeIfNoCopyPerms);
+        }
 
         if (ctx) {
             removeMenu |= (ctx->tab && ctx->tab->AsChm() && cmdIdInList(rmoveIfChm));
@@ -1242,6 +1276,7 @@ HMENU BuildMenuFromMenuDef(MenuDef* menuDef, HMENU menu, BuildMenuCtx* ctx) {
 
             disableMenu |= (!ctx->hasSelection && cmdIdInList(disableIfNoSelection));
             disableMenu |= (!ctx->annotationUnderCursor && (cmdId == CmdSelectAnnotation));
+            disableMenu |= (!ctx->annotationUnderCursor && (cmdId == CmdDeleteAnnotation));
             disableMenu |= !ctx->hasUnsavedAnnotations && (cmdId == CmdSaveAnnotations);
 
             removeMenu |= !ctx->isCursorOnPage && (subMenuDef == menuDefCreateAnnotUnderCursor);
@@ -1317,19 +1352,18 @@ static struct {
 // clang-format on
 
 int MenuIdFromVirtualZoom(float virtualZoom) {
-    int n = (int)dimof(gZoomMenuIds);
-    for (int i = 0; i < n; i++) {
-        if (virtualZoom == gZoomMenuIds[i].zoom) {
-            return gZoomMenuIds[i].itemId;
+    for (auto&& it : gZoomMenuIds) {
+        if (virtualZoom == it.zoom) {
+            return it.itemId;
         }
     }
     return CmdZoomCustom;
 }
 
 float ZoomMenuItemToZoom(int menuItemId) {
-    for (int i = 0; i < dimof(gZoomMenuIds); i++) {
-        if (menuItemId == gZoomMenuIds[i].itemId) {
-            return gZoomMenuIds[i].zoom;
+    for (auto&& it : gZoomMenuIds) {
+        if (menuItemId == it.itemId) {
+            return it.zoom;
         }
     }
     CrashIf(true);
@@ -1339,8 +1373,8 @@ float ZoomMenuItemToZoom(int menuItemId) {
 static void ZoomMenuItemCheck(HMENU m, int menuItemId, bool canZoom) {
     CrashIf((CmdZoomFirst > menuItemId) || (menuItemId > CmdZoomLast));
 
-    for (int i = 0; i < dimof(gZoomMenuIds); i++) {
-        win::menu::SetEnabled(m, gZoomMenuIds[i].itemId, canZoom);
+    for (auto&& it : gZoomMenuIds) {
+        win::menu::SetEnabled(m, it.itemId, canZoom);
     }
 
     if (CmdZoom100 == menuItemId) {
@@ -1397,8 +1431,7 @@ static bool IsFileCloseMenuEnabled() {
 
 static void SetMenuStateForSelection(TabInfo* tab, HMENU menu) {
     bool isTextSelected = tab && tab->win && tab->win->showSelection && tab->selectionOnPage;
-    for (int i = 0; i < dimof(disableIfNoSelection); i++) {
-        int id = disableIfNoSelection[i];
+    for (int id : disableIfNoSelection) {
         win::menu::SetEnabled(menu, id, isTextSelected);
     }
     for (int id = CmdSelectionHandlerFirst; id < CmdSelectionHandlerLast; id++) {
@@ -1441,8 +1474,7 @@ static void MenuUpdateStateForWindow(WindowInfo* win) {
     TabInfo* tab = win->currentTab;
 
     bool hasDocument = tab && tab->IsDocLoaded();
-    for (int i = 0; i < dimof(disableIfNoDocument); i++) {
-        int id = disableIfNoDocument[i];
+    for (int id : disableIfNoDocument) {
         win::menu::SetEnabled(win->menu, id, hasDocument);
     }
 
@@ -1476,13 +1508,11 @@ static void MenuUpdateStateForWindow(WindowInfo* win) {
     bool fileExists = tab && file::Exists(tab->filePath);
 
     if (tab && tab->ctrl && !fileExists && dir::Exists(tab->filePath)) {
-        for (int i = 0; i < dimof(disableIfDirectoryOrBrokenPDF); i++) {
-            int id = disableIfDirectoryOrBrokenPDF[i];
+        for (int id : disableIfDirectoryOrBrokenPDF) {
             win::menu::SetEnabled(win->menu, id, false);
         }
     } else if (fileExists && CouldBePDFDoc(tab)) {
-        for (int i = 0; i < dimof(disableIfDirectoryOrBrokenPDF); i++) {
-            int id = disableIfDirectoryOrBrokenPDF[i];
+        for (int id : disableIfDirectoryOrBrokenPDF) {
             win::menu::SetEnabled(win->menu, id, true);
         }
     }
@@ -1680,12 +1710,17 @@ void OnWindowContextMenu(WindowInfo* win, int x, int y) {
             break;
         case CmdSelectAnnotation:
             CrashIf(!buildCtx.annotationUnderCursor);
+
+            [[fallthrough]];
         case CmdEditAnnotations:
             StartEditAnnotations(tab, nullptr);
             SelectAnnotationInEditWindow(tab->editAnnotsWindow, buildCtx.annotationUnderCursor);
             break;
+        case CmdDeleteAnnotation:
+            DeleteAnnotationAndUpdateUI(tab, tab->editAnnotsWindow, buildCtx.annotationUnderCursor);
+            break;
         case CmdCopyLinkTarget: {
-            WCHAR* tmp = CleanupFileURL(value);
+            WCHAR* tmp = CleanupURLForClipbardCopy(value);
             CopyTextToClipboard(tmp);
             str::Free(tmp);
         } break;

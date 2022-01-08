@@ -281,7 +281,34 @@ static void EnableSaveIfAnnotationsChanged(EditAnnotationsWindow* ew) {
     ew->buttonSaveToNewFile->SetIsEnabled(didChange);
 }
 
+static void RemoveDeletedAnnotations(Vec<Annotation*>* v) {
+again:
+    auto n = v->isize();
+    for (int i = 0; i < n; i++) {
+        auto a = v->at(i);
+        if (a->isDeleted) {
+            v->RemoveAt((size_t)i, 1);
+            delete a;
+            goto again;
+        }
+    }
+}
+
+// Annotation* is a temporary wrapper. Find matching in list of annotations
+static Annotation* FindMatchingAnnotation(EditAnnotationsWindow* ew, Annotation* annot) {
+    if (!ew || !ew->annotations) {
+        return annot;
+    }
+    for (auto a : *ew->annotations) {
+        if (IsAnnotationEq(a, annot)) {
+            return a;
+        }
+    }
+    return nullptr;
+}
+
 static void RebuildAnnotations(EditAnnotationsWindow* ew) {
+    RemoveDeletedAnnotations(ew->annotations);
     auto model = new ListBoxModelStrings();
     int n = 0;
     if (ew->annotations) {
@@ -291,9 +318,7 @@ static void RebuildAnnotations(EditAnnotationsWindow* ew) {
     str::Str s;
     for (int i = 0; i < n; i++) {
         auto annot = ew->annotations->at(i);
-        if (annot->isDeleted) {
-            continue;
-        }
+        CrashIf(annot->isDeleted);
         s.Reset();
         s.AppendFmt("page %d, ", annot->pageNo);
         s.AppendView(AnnotationReadableName(annot->type));
@@ -793,12 +818,20 @@ static void ButtonEmbedAttachment(EditAnnotationsWindow* ew) {
     MessageBoxNYI(ew->mainWindow->hwnd);
 }
 
+void DeleteAnnotationAndUpdateUI(TabInfo* tab, EditAnnotationsWindow* ew, Annotation* annot) {
+    annot = FindMatchingAnnotation(ew, annot);
+    Delete(annot);
+    if (ew != nullptr) {
+        // can be null if called from Menu.cpp and annotations window is not visible
+        RebuildAnnotations(ew);
+        UpdateUIForSelectedAnnotation(ew, -1);
+    }
+    WindowInfoRerender(tab->win);
+}
+
 static void ButtonDeleteHandler(EditAnnotationsWindow* ew) {
     CrashIf(!ew->annot);
-    Delete(ew->annot);
-    RebuildAnnotations(ew);
-    UpdateUIForSelectedAnnotation(ew, -1);
-    WindowInfoRerender(ew->tab->win);
+    DeleteAnnotationAndUpdateUI(ew->tab, ew, ew->annot);
 }
 
 static void ListBoxSelectionChanged(EditAnnotationsWindow* ew, ListBoxSelectionChangedEvent* ev) {
@@ -1327,18 +1360,26 @@ void StartEditAnnotations(TabInfo* tab, Vec<Annotation*>& annots) {
     DeleteVecMembers(annots);
 }
 
-PdfColor GetAnnotationHighlightColor() {
-    ParsedColor* parsedCol = GetPrefsColor(gGlobalPrefs->annotations.highlightColor);
+static PdfColor GetAnnotationHighlightColor() {
+    auto& a = gGlobalPrefs->annotations;
+    ParsedColor* parsedCol = GetParsedColor(a.highlightColor, a.highlightColorParsed);
     return parsedCol->pdfCol;
 }
 
-PdfColor GetAnnotationTextIconColor() {
-    ParsedColor* parsedCol = GetPrefsColor(gGlobalPrefs->annotations.textIconColor);
+static PdfColor GetAnnotationUnderlineColor() {
+    auto& a = gGlobalPrefs->annotations;
+    ParsedColor* parsedCol = GetParsedColor(a.underlineColor, a.underlineColorParsed);
+    return parsedCol->pdfCol;
+}
+
+static PdfColor GetAnnotationTextIconColor() {
+    auto& a = gGlobalPrefs->annotations;
+    ParsedColor* parsedCol = GetParsedColor(a.textIconColor, a.textIconColorParsed);
     return parsedCol->pdfCol;
 }
 
 // caller needs to free()
-char* GetAnnotationTextIcon() {
+static char* GetAnnotationTextIcon() {
     char* s = str::Dup(gGlobalPrefs->annotations.textIconType);
     // this way user can use "new paragraph" and we'll match "NewParagraph"
     str::RemoveCharsInPlace(s, " ");
@@ -1425,6 +1466,12 @@ Annotation* EngineMupdfCreateAnnotation(EngineBase* engine, AnnotationType typ, 
             SetIconName(res, iconName.AsView());
         }
         auto col = GetAnnotationTextIconColor();
+        SetColor(res, col);
+    } else if (typ == AnnotationType::Underline) {
+        auto col = GetAnnotationUnderlineColor();
+        SetColor(res, col);
+    } else if (typ == AnnotationType::Highlight) {
+        auto col = GetAnnotationHighlightColor();
         SetColor(res, col);
     }
     pdf_drop_annot(ctx, annot);

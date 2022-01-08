@@ -414,6 +414,12 @@ static void do_save_pdf_dialog(int for_signing)
 				{
 					pdf_save_document(ctx, pdf, save_filename, &save_opts);
 					fz_strlcpy(filename, save_filename, PATH_MAX);
+					fz_strlcat(save_filename, ".journal", PATH_MAX);
+#ifdef _WIN32
+					fz_remove_utf8(save_filename);
+#else
+					remove(save_filename);
+#endif
 					reload_document();
 				}
 			}
@@ -698,7 +704,7 @@ static void do_annotate_date(void)
 	const char *s = format_date(pdf_annot_modification_date(ctx, ui.selected_annot));
 	if (s)
 		ui_label("Date: %s", s);
-		}
+}
 
 static void do_annotate_contents(void)
 {
@@ -1293,7 +1299,7 @@ static int mark_search_step(int cancel)
 		return -1;
 	}
 
-	count = fz_search_page_number(ctx, (fz_document*)pdf, rds_state.i-1, search_needle, quads, nelem(quads));
+	count = fz_search_page_number(ctx, (fz_document*)pdf, rds_state.i-1, search_needle, NULL, quads, nelem(quads));
 	if (count > 0)
 	{
 		pdf_page *page = pdf_load_page(ctx, pdf, rds_state.i-1);

@@ -205,7 +205,8 @@ RenderedBitmap* EngineImages::RenderPage(RenderPageArgs& args) {
     Rect pageRcI = PageMediabox(pageNo).Round();
     ImageAttributes imgAttrs;
     imgAttrs.SetWrapMode(WrapModeTileFlipXY);
-    Status ok = g.DrawImage(page->bmp, ToGdipRect(pageRcI), pageRcI.x, pageRcI.y, pageRcI.dx, pageRcI.dy, UnitPixel, &imgAttrs);
+    Status ok =
+        g.DrawImage(page->bmp, ToGdipRect(pageRcI), pageRcI.x, pageRcI.y, pageRcI.dx, pageRcI.dy, UnitPixel, &imgAttrs);
 
     DropPage(page, false);
     DeleteDC(hDC);
@@ -376,7 +377,6 @@ void EngineImages::DropPage(ImagePage* page, bool forceRemove) {
     }
 }
 
-
 // Get content box for image by cropping out margins of similar color
 RectF EngineImages::PageContentBox(int pageNo, RenderTarget target) {
     // try to load bitmap for the image
@@ -423,7 +423,7 @@ RectF EngineImages::PageContentBox(int pageNo, RenderTarget target) {
         CrashIf(x < 0 || x >= (int)bmpData.Width || y < 0 || y >= (int)bmpData.Height);
         auto data = static_cast<const uint8_t*>(bmpData.Scan0);
         unsigned idx = bytesPerPixel * x + bmpData.Stride * y;
-        uint32_t rgb = (data[idx+2] << 16) | (data[idx+1] << 8) | data[idx];
+        uint32_t rgb = (data[idx + 2] << 16) | (data[idx + 1] << 8) | data[idx];
         // ignore the lowest 3 bits (7=0b111) of each color component
         return rgb & (~0x070707U);
     };
@@ -432,7 +432,7 @@ RectF EngineImages::PageContentBox(int pageNo, RenderTarget target) {
     // crop the page, but no more than 25% from each side
 
     // left margin
-    marginColor = getPixel(0, h/2);
+    marginColor = getPixel(0, h / 2);
     for (; r.x < w / 4 && r.dx > w / 2; r.x += deltaX, r.dx -= deltaX) {
         bool ok = true;
         for (int y = 0; y <= h - deltaY; y += deltaY) {
@@ -445,7 +445,7 @@ RectF EngineImages::PageContentBox(int pageNo, RenderTarget target) {
     }
 
     // right margin
-    marginColor = getPixel(w-1, h/2);
+    marginColor = getPixel(w - 1, h / 2);
     for (; r.dx > w / 2; r.dx -= deltaX) {
         bool ok = true;
         for (int y = 0; y <= h - deltaY; y += deltaY) {
@@ -458,7 +458,7 @@ RectF EngineImages::PageContentBox(int pageNo, RenderTarget target) {
     }
 
     // top margin
-    marginColor = getPixel(w/2, 0);
+    marginColor = getPixel(w / 2, 0);
     for (; r.y < h / 4 && r.dy > h / 2; r.y += deltaY, r.dy -= deltaY) {
         bool ok = true;
         for (int x = r.x; x <= r.x + r.dx - deltaX; x += deltaX) {
@@ -471,7 +471,7 @@ RectF EngineImages::PageContentBox(int pageNo, RenderTarget target) {
     }
 
     // bottom margin
-    marginColor = getPixel(w/2, h-1);
+    marginColor = getPixel(w / 2, h - 1);
     for (; r.dy > h / 2; r.dy -= deltaY) {
         bool ok = true;
         for (int x = r.x; x <= r.x + r.dx - deltaX; x += deltaX) {
@@ -551,6 +551,11 @@ bool EngineImage::LoadSingleFile(const WCHAR* file) {
 
     AutoFree data = file::ReadFile(file);
     fileExt = GfxFileExtFromData(data.AsSpan());
+    if (fileExt == nullptr) {
+        Kind kind = GuessFileTypeFromName(file);
+        fileExt = GfxFileExtFromKind(kind);
+    }
+    CrashIf(fileExt == nullptr);
     defaultExt = fileExt;
     image = BitmapFromData(data.AsSpan());
     return FinishLoading();
@@ -749,10 +754,8 @@ EngineBase* EngineImage::CreateFromStream(IStream* stream) {
     return engine;
 }
 
-static Kind imageEngineKinds[] = {
-    kindFilePng, kindFileJpeg, kindFileGif, kindFileTiff, kindFileBmp, kindFileTga,
-    kindFileJxr, kindFileHdp,  kindFileWdp, kindFileWebp, kindFileJp2,
-};
+static Kind imageEngineKinds[] = {kindFilePng, kindFileJpeg, kindFileGif, kindFileTiff, kindFileBmp, kindFileTga,
+                                  kindFileJxr, kindFileHdp,  kindFileWdp, kindFileWebp, kindFileJp2, kindFileHeic};
 
 bool IsEngineImageSupportedFileType(Kind kind) {
     // logf("IsEngineImageSupportedFileType(%s)\n", kind);
@@ -984,8 +987,6 @@ class EngineCbx : public EngineImages, public json::ValueVisitor {
 
     WCHAR* GetProperty(DocumentProperty prop) override;
 
-    [[nodiscard]] const WCHAR* GetDefaultFileExt() const;
-
     TocTree* GetToc() override;
 
     // json::ValueVisitor
@@ -1013,9 +1014,6 @@ class EngineCbx : public EngineImages, public json::ValueVisitor {
     Vec<MultiFormatArchive::FileInfo*> files;
     TocTree* tocTree = nullptr;
 
-    // not owned
-    const WCHAR* defaultExt = nullptr;
-
     // extracted metadata
     AutoFreeWstr propTitle;
     WStrVec propAuthors;
@@ -1039,7 +1037,7 @@ EngineCbx::~EngineCbx() {
     delete cbxFile;
 
     for (auto&& img : images) {
-        if(!img.empty())
+        if (!img.empty())
             str::Free(img);
     }
 }
@@ -1202,10 +1200,10 @@ TocTree* EngineCbx::GetToc() {
 
 ByteSlice EngineCbx::GetImageData(int pageNo) {
     CrashIf((pageNo < 1) || (pageNo > PageCount()));
-    if(!images[pageNo - 1].empty())
+    if (!images[pageNo - 1].empty())
         return images[pageNo - 1];
     // unload previous pages
-    if(pageNo > 5 && !images[pageNo - 6].empty())
+    if (pageNo > 5 && !images[pageNo - 6].empty())
     {
         str::Free(images[pageNo - 6]);
         images[pageNo - 6] = {};
@@ -1335,10 +1333,6 @@ WCHAR* EngineCbx::GetProperty(DocumentProperty prop) {
         default:
             return nullptr;
     }
-}
-
-const WCHAR* EngineCbx::GetDefaultFileExt() const {
-    return defaultExt;
 }
 
 Bitmap* EngineCbx::LoadBitmapForPage(int pageNo, bool& deleteAfterUse) {

@@ -1,8 +1,8 @@
 --[[
-To generate Visual Studio files (in vs2017/ directory), run:
+To generate Visual Studio files (in vs2019/ or vs2022/ directory), run:
 scripts\premake-regenerate-vs-projects.ps1
 
-I'm using premake5 alpha12 from https://premake.github.io/download.html#v5
+I'm using premake5 beta1 from https://premake.github.io/download.html#v5
 
 Note about nasm: when providing "-I foo/bar/" flag to nasm.exe, it must be
 "foo/bar/" and not just "foo/bar".
@@ -75,6 +75,17 @@ function regconf()
   runtime "Release"
 end
 
+-- setup WebView2 paths
+function webviewconf()
+  includedirs { "packages/Microsoft.Web.WebView2.1.0.992.28/build/native/include" }
+  filter "platforms:x32"
+    libdirs { "packages/Microsoft.Web.WebView2.1.0.992.28/build/native/x86" }
+  filter "platforms:x64 or x64_asan"
+    libdirs { "packages/Microsoft.Web.WebView2.1.0.992.28/build/native/x64" }
+  filter {}
+  links { "WebView2LoaderStatic.lib"}
+end
+
 -- config for stable libraries where debug build is done with optimization
 function optconf()
   optimize "Size"
@@ -122,11 +133,11 @@ workspace "SumatraPDF"
   platforms { "x32", "x64", "x64_asan" }
   startproject "SumatraPDF"
 
-  filter "platforms:x32 or x32_asan"
+  filter "platforms:x32"
      architecture "x86"
   filter {}
 
-  filter "platforms:x32_asan or x64_asan"
+  filter "platforms:x64_asan"
     buildoptions { "/fsanitize=address"}
     defines { "ASAN_BUILD=1" }
     -- disablewarnings { "4731" }
@@ -147,20 +158,16 @@ workspace "SumatraPDF"
     location "vs2019"
   filter {}
 
+  filter "action:vs2022"
+    location "vs2022"
+  filter {}
+
   filter {"platforms:x32", "configurations:Release"}
     targetdir "out/rel32"
   filter {"platforms:x32", "configurations:ReleaseAnalyze"}
     targetdir "out/rel32_prefast"
   filter {"platforms:x32", "configurations:Debug"}
     targetdir "out/dbg32"
-  filter {}
-
-  filter {"platforms:x32_asan", "configurations:Release"}
-    targetdir "out/rel32_asan"
-  filter {"platforms:x32_asan", "configurations:ReleaseAnalyze"}
-    targetdir "out/rel32_prefast_asan"
-  filter {"platforms:x32_asan", "configurations:Debug"}
-    targetdir "out/dbg32_asan"
   filter {}
 
   filter {"platforms:x64", "configurations:Release"}
@@ -239,7 +246,7 @@ workspace "SumatraPDF"
       "MINILISPAPI=/**/",
       "DEBUGLVL=0"
     }
-    filter {"platforms:x32_asan or x64_asan"}
+    filter {"platforms:x64_asan"}
       defines { "DISABLE_MMX" }
     filter{}
     disablewarnings { "4100", "4189", "4244", "4267", "4302", "4311", "4312", "4505"}
@@ -320,7 +327,7 @@ workspace "SumatraPDF"
     -- -I .\ext\libjpeg-turbo\win\ -f win32
     -- -o .\obj-rel\jpegturbo\jsimdcpu.obj
     -- .\ext\libjpeg-turbo\simd\jsimdcpu.asm
-    filter {'files:**.asm', 'platforms:x32 or x32_asan'}
+    filter {'files:**.asm', 'platforms:x32'}
        buildmessage '%{file.relpath}'
        buildoutputs { '%{cfg.objdir}/%{file.basename}.obj' }
        buildcommands {
@@ -421,7 +428,7 @@ workspace "SumatraPDF"
     -- -I .\ext\libjpeg-turbo\win\ -f win32
     -- -o .\obj-rel\jpegturbo\jsimdcpu.obj
     -- .\ext\libjpeg-turbo\simd\jsimdcpu.asm
-    filter {'files:**.asm', 'platforms:x32 or x32_asan'}
+    filter {'files:**.asm', 'platforms:x32'}
        buildmessage '%{file.relpath}'
        buildoutputs { '%{cfg.objdir}/%{file.basename}.obj' }
        buildcommands {
@@ -556,7 +563,7 @@ workspace "SumatraPDF"
   }
     -- .\ext\..\bin\nasm.exe -I .\mupdf\ -f win32 -o .\obj-rel\mupdf\font_base14.obj
     -- .\mupdf\font_base14.asm
-    filter {'files:**.asm', 'platforms:x32 or x32_asan'}
+    filter {'files:**.asm', 'platforms:x32'}
        buildmessage 'Compiling %{file.relpath}'
        buildoutputs { '%{cfg.objdir}/%{file.basename}.obj' }
        buildcommands {
@@ -776,6 +783,8 @@ workspace "SumatraPDF"
     flags { "NoManifest" }
     includedirs { "src", "mupdf/include" }
 
+    webviewconf()
+
     synctex_files()
     mui_files()
     uia_files()
@@ -827,6 +836,8 @@ workspace "SumatraPDF"
     mui_files()
     uia_files()
     sumatrapdf_files()
+
+    webviewconf()
 
     defines { "_CRT_SECURE_NO_WARNINGS" }
     defines { "DISABLE_DOCUMENT_RESTRICTIONS" }

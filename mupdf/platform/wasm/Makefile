@@ -8,10 +8,7 @@ all: $(MUPDF_JS)
 EMSDK_DIR := /opt/emsdk
 MUPDF_CORE := ../../build/wasm/libmupdf.a ../../build/wasm/libmupdf-third.a
 $(MUPDF_CORE) : .FORCE
-	$(MAKE) -j4 -C ../.. \
-		OUT=wasm build=release \
-		XCFLAGS='-DTOFU -DTOFU_CJK -DFZ_ENABLE_SVG=0 -DFZ_ENABLE_HTML=0 -DFZ_ENABLE_EPUB=0 -DFZ_ENABLE_JS=0' \
-		generate
+	$(MAKE) -j4 -C ../.. generate
 	BASH_SOURCE=$(EMSDK_DIR)/emsdk_env.sh; \
 	. $(EMSDK_DIR)/emsdk_env.sh; \
 	$(MAKE) -j4 -C ../.. \
@@ -26,7 +23,7 @@ $(MUPDF_JS) $(MUPDF_WASM) : $(MUPDF_CORE) wrap.c wrap.js
 		-s WASM=1 \
 		-s VERBOSE=0 \
 		-s ABORTING_MALLOC=0 \
-		-s TOTAL_MEMORY=134217728 \
+		-s ALLOW_MEMORY_GROWTH=1 \
 		-s EXTRA_EXPORTED_RUNTIME_METHODS='["ccall","cwrap"]' \
 		-I ../../include \
 		--pre-js wrap.js \
@@ -41,8 +38,6 @@ run: $(SAMPLE_PDF) $(MUPDF_JS) $(MUDPF_WASM)
 
 clean:
 	rm -f $(MUPDF_JS) $(MUPDF_WASM)
-
-nuke: clean
 	$(MAKE) -C ../../ OS=wasm build=release clean
 
 .PHONY: .FORCE clean

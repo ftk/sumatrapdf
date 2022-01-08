@@ -2,17 +2,20 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"path"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/kjk/minio"
 )
 
 // we delete old daily and pre-release builds. This defines how many most recent
 // builds to retain
-const nBuildsToRetainPreRel = 16
+const nBuildsToRetainPreRel = 5
 
 const (
 	// TODO: only remains because we want to update the version
@@ -98,16 +101,8 @@ type DownloadUrls struct {
 	portableZip32 string
 }
 
-func getDownloadUrls(storage string, buildType string, ver string) *DownloadUrls {
-	var prefix string
-	switch storage {
-	case "spaces":
-		prefix = "https://kjkpubsf.sfo2.digitaloceanspaces.com/"
-	case "s3":
-		prefix = "https://kjkpub.s3.amazonaws.com/"
-	default:
-		panic(fmt.Sprintf("unknown storage '%s'", storage))
-	}
+func getDownloadUrls(mc *minio.Client, buildType string, ver string) *DownloadUrls {
+	prefix := mc.URLBase()
 	prefix += getRemoteDir(buildType)
 	// zip is like .exe but can be half the size due to compression
 	res := &DownloadUrls{
@@ -143,7 +138,7 @@ func getDownloadUrls(storage string, buildType string, ver string) *DownloadUrls
 }
 
 // sumatrapdf/sumatralatest.js
-func createSumatraLatestJs(buildType string) string {
+func createSumatraLatestJs(mc *minio.Client, buildType string) string {
 	var appName string
 	switch buildType {
 	case buildTypeDaily, buildTypePreRel:
@@ -158,6 +153,7 @@ func createSumatraLatestJs(buildType string) string {
 	// TODO: use
 	// urls := getDownloadUrls(storage, buildType, ver)
 
+	host := strings.TrimSuffix(mc.URLBase(), "/")
 	tmplText := `
 var sumLatestVer = {{.Ver}};
 var sumCommitSha1 = "{{ .Sha1 }}";
@@ -177,7 +173,7 @@ var sumLatestInstaller64 = "{{.Host}}/{{.Prefix}}-64-install.exe";
 	ver := getVerForBuildType(buildType)
 	sha1 := getGitSha1()
 	d := map[string]interface{}{
-		"Host":     "https://kjkpubsf.sfo2.digitaloceanspaces.com/software/sumatrapdf/" + buildType,
+		"Host":     host + "software/sumatrapdf/" + buildType,
 		"Ver":      ver,
 		"Sha1":     sha1,
 		"CurrDate": currDate,
@@ -185,20 +181,20 @@ var sumLatestInstaller64 = "{{.Host}}/{{.Prefix}}-64-install.exe";
 	}
 	// for prerel, version is in path, not in name
 	if buildType == buildTypePreRel {
-		d["Host"] = "https://kjkpubsf.sfo2.digitaloceanspaces.com/software/sumatrapdf/" + buildType + "/" + ver
+		d["Host"] = host + "/software/sumatrapdf/" + buildType + "/" + ver
 		d["Prefix"] = appName
 	}
 	return execTextTemplate(tmplText, d)
 }
 
-func getVersionFilesForLatestInfo(storage string, buildType string) [][]string {
+func getVersionFilesForLatestInfo(mc *minio.Client, buildType string) [][]string {
 	panicIf(buildType == buildTypeRel)
 	remotePaths := getRemotePaths(buildType)
 	var res [][]string
 
 	{
 		// *latest.js : for the website
-		s := createSumatraLatestJs(buildType)
+		s := createSumatraLatestJs(mc, buildType)
 		res = append(res, []string{remotePaths[0], s})
 	}
 
@@ -211,7 +207,7 @@ func getVersionFilesForLatestInfo(storage string, buildType string) [][]string {
 	// TODO: maybe provide download urls for both storage services
 	{
 		// *-update.txt : for current builds
-		urls := getDownloadUrls(storage, buildType, ver)
+		urls := getDownloadUrls(mc, buildType, ver)
 		s := `[SumatraPDF]
 Latest: ${ver}
 Installer64: ${inst64}
@@ -240,40 +236,40 @@ PortableZip32: ${zip32}
 
 // we shouldn't re-upload files. We upload manifest-${ver}.txt last, so we
 // consider a pre-release build already present in s3 if manifest file exists
-func minioVerifyBuildNotInStorageMust(mc *MinioClient, buildType string) {
+func minioVerifyBuildNotInStorageMust(mc *minio.Client, buildType string) {
 	dirRemote := getRemoteDir(buildType)
 	ver := getVerForBuildType(buildType)
 	fname := fmt.Sprintf("SumatraPDF-prerelease-%s-manifest.txt", ver)
 	remotePath := path.Join(dirRemote, fname)
-	exists := minioExists(mc, remotePath)
+	exists := mc.Exists(remotePath)
 	panicIf(exists, "build of type '%s' for ver '%s' already exists in s3 because file '%s' exists\n", buildType, ver, remotePath)
 }
 
-func getFinalDirForBuildType(buildType string) string {
-	var dir string
-	switch buildType {
-	case buildTypeRel:
-		dir = "final-rel"
-	case buildTypePreRel:
-		dir = "final-prerel"
-	default:
-		panicIf(true, "invalid buildType '%s'", buildType)
-	}
-	return filepath.Join("out", dir)
-}
-
 // https://kjkpubsf.sfo2.digitaloceanspaces.com/software/sumatrapdf/prerel/SumatraPDF-prerelease-1027-install.exe etc.
-func minioUploadBuildMust(mc *MinioClient, where string, buildType string) {
+func minioUploadBuildMust(mc *minio.Client, buildType string) {
 	timeStart := time.Now()
 	defer func() {
-		logf(ctx(), "Uploaded the build to spaces in %s\n", time.Since(timeStart))
+		logf(ctx(), "Uploaded build '%s' to %s in %s\n", buildType, mc.URLBase(), time.Since(timeStart))
 	}()
 
 	dirRemote := getRemoteDir(buildType)
-	dirLocal := getFinalDirForBuildType(buildType)
+	getFinalDirForBuildType := func() string {
+		var dir string
+		switch buildType {
+		case buildTypeRel:
+			dir = "final-rel"
+		case buildTypePreRel:
+			dir = "final-prerel"
+		default:
+			panicIf(true, "invalid buildType '%s'", buildType)
+		}
+		return filepath.Join("out", dir)
+	}
+
+	dirLocal := getFinalDirForBuildType()
 	//verifyBuildNotInSpaces(c, buildType)
 
-	err := minioUploadDir(mc, dirRemote, dirLocal)
+	err := mc.UploadDir(dirRemote, dirLocal, true)
 	must(err)
 
 	// for release build we don't upload files with version info
@@ -281,17 +277,17 @@ func minioUploadBuildMust(mc *MinioClient, where string, buildType string) {
 		return
 	}
 
-	spacesUploadBuildUpdateInfoMust := func(buildType string) {
-		files := getVersionFilesForLatestInfo(where, buildType)
+	uploadBuildUpdateInfoMust := func(buildType string) {
+		files := getVersionFilesForLatestInfo(mc, buildType)
 		for _, f := range files {
 			remotePath := f[0]
-			err := minioUploadDataPublic(mc, remotePath, []byte(f[1]))
+			_, err := mc.UploadData(remotePath, []byte(f[1]), true)
 			must(err)
-			logf(ctx(), "Uploaded to %s: '%s'\n", where, remotePath)
+			logf(ctx(), "Uploaded `%s%s'\n", mc.URLBase(), remotePath)
 		}
 	}
 
-	spacesUploadBuildUpdateInfoMust(buildType)
+	uploadBuildUpdateInfoMust(buildType)
 }
 
 type filesByVer struct {
@@ -333,19 +329,19 @@ func groupFilesByVersion(files []string) []*filesByVer {
 	return res
 }
 
-func minioDeleteOldBuildsPrefix(mc *MinioClient, buildType string) {
+func minioDeleteOldBuildsPrefix(mc *minio.Client, buildType string) {
 	panicIf(buildType == buildTypeRel, "can't delete release builds")
 
 	nBuildsToRetain := nBuildsToRetainPreRel
 	remoteDir := "software/sumatrapdf/prerel/"
-	objectsCh := minioListObjects(mc, remoteDir)
+	objectsCh := mc.ListObjects(remoteDir)
 	var keys []string
 	for f := range objectsCh {
 		keys = append(keys, f.Key)
 		//logf(ctx(), "  %s\n", f.Key)
 	}
 
-	uri := minioURLForPath(mc, remoteDir)
+	uri := mc.URLForPath(remoteDir)
 	logf(ctx(), "%d files under '%s'\n", len(keys), uri)
 	byVer := groupFilesByVersion(keys)
 	for i, v := range byVer {
@@ -354,7 +350,7 @@ func minioDeleteOldBuildsPrefix(mc *MinioClient, buildType string) {
 			logf(ctx(), "deleting %d\n", v.ver)
 			if true {
 				for _, key := range v.files {
-					err := minioRemove(mc, key)
+					err := mc.Remove(key)
 					must(err)
 					logf(ctx(), "  deleted %s\n", key)
 				}
@@ -365,12 +361,26 @@ func minioDeleteOldBuildsPrefix(mc *MinioClient, buildType string) {
 	}
 }
 
-func spacesDeleteOldBuilds() {
-	mc := newMinioSpacesClient()
-	minioDeleteOldBuildsPrefix(mc, buildTypePreRel)
+func newMinioSpacesClient() *minio.Client {
+	config := &minio.Config{
+		Bucket:   "kjkpubsf",
+		Endpoint: "sfo2.digitaloceanspaces.com",
+		Access:   os.Getenv("SPACES_KEY"),
+		Secret:   os.Getenv("SPACES_SECRET"),
+	}
+	mc, err := minio.New(config)
+	must(err)
+	return mc
 }
 
-func s3DeleteOldBuilds() {
-	mc := newMinioS3Client()
-	minioDeleteOldBuildsPrefix(mc, buildTypePreRel)
+func newMinioS3Client() *minio.Client {
+	config := &minio.Config{
+		Bucket:   "kjkpub",
+		Endpoint: "s3.amazonaws.com",
+		Access:   os.Getenv("AWS_ACCESS"),
+		Secret:   os.Getenv("AWS_SECRET"),
+	}
+	mc, err := minio.New(config)
+	must(err)
+	return mc
 }

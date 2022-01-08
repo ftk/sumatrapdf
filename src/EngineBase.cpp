@@ -13,6 +13,14 @@
 
 #include "utils/Log.h"
 
+bool IsExternalUrl(const WCHAR* url) {
+    return str::StartsWithI(url, L"http://") || str::StartsWithI(url, L"https://") || str::StartsWithI(url, L"mailto:");
+}
+
+bool IsExternalUrl(const char* url) {
+    return str::StartsWithI(url, "http://") || str::StartsWithI(url, "https://") || str::StartsWithI(url, "mailto:");
+}
+
 void FreePageText(PageText* pageText) {
     str::Free(pageText->text);
     free((void*)pageText->coords);
@@ -401,6 +409,18 @@ static const WCHAR* SkipFileProtocolTemp(const WCHAR* s) {
     return s;
 }
 
+// skip mailto: from s.
+static const WCHAR* SkipMailProtocolTemp(const WCHAR* s) {
+    if (!str::StartsWithI(s, L"mailto:")) {
+        return s;
+    }
+    s += 7;              // skip "mailto:"
+    while (*s == L'/') { // probably not needed but just in case
+        s++;
+    }
+    return s;
+}
+
 // s could be in format "file://path.pdf#page=1"
 // We only want the "path.pdf"
 // caller must free
@@ -414,4 +434,14 @@ WCHAR* CleanupFileURL(const WCHAR* s) {
         *s3 = 0;
     }
     return s2;
+}
+
+// s could be in format "file://path.pdf#page=1" or "mailto:foo@bar.com"
+// We only want the "path.pdf" / "foo@bar.com"
+// caller must free
+WCHAR* CleanupURLForClipbardCopy(const WCHAR* s) {
+    WCHAR* s2 = CleanupFileURL(s);
+    WCHAR* s3 = str::Dup(SkipMailProtocolTemp(s));
+    str::Free(s2);
+    return s3;
 }

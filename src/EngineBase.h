@@ -19,6 +19,9 @@ extern Kind kindEngineChm;
 extern Kind kindEngineHtml;
 extern Kind kindEngineTxt;
 
+bool IsExternalUrl(const WCHAR* url);
+bool IsExternalUrl(const char* url);
+
 /* certain OCGs will only be rendered for some of these (e.g. watermarks) */
 enum class RenderTarget { View, Print, Export };
 
@@ -527,3 +530,4 @@ struct PasswordUI {
 };
 
 WCHAR* CleanupFileURL(const WCHAR*);
+WCHAR* CleanupURLForClipbardCopy(const WCHAR*);

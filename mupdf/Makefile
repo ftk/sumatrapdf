@@ -126,7 +126,12 @@ $(OUT)/source/%.o : source/%.c
 	$(CC_CMD) $(WARNING_CFLAGS) -Wdeclaration-after-statement $(LIB_CFLAGS) $(THIRD_CFLAGS)
 
 $(OUT)/source/%.o : source/%.cpp
-	$(CXX_CMD) $(WARNING_CFLAGS) $(LIB_CFLAGS) $(THIRD_CFLAGS) $(TESSERACT_BUILD_CFLAGS)
+	$(CXX_CMD) $(WARNING_CFLAGS) $(LIB_CFLAGS) $(THIRD_CFLAGS)
+
+ifeq ($(HAVE_TESSERACT),yes)
+$(OUT)/source/fitz/tessocr.o : source/fitz/tessocr.cpp
+	$(CXX_CMD) $(WARNING_CFLAGS) $(LIB_CFLAGS) $(THIRD_CFLAGS) $(TESSERACT_CFLAGS)
+endif
 
 $(OUT)/platform/%.o : platform/%.c
 	$(CC_CMD) $(WARNING_CFLAGS)
@@ -165,7 +170,7 @@ PKCS7_OBJ := $(PKCS7_SRC:%.c=$(OUT)/%.o)
 
 # --- Generated embedded font files ---
 
-HEXDUMP_EXE := $(OUT)/scripts/hexdump.exe
+HEXDUMP_SH := scripts/hexdump.sh
 
 FONT_BIN := $(sort $(wildcard resources/fonts/urw/*.cff))
 FONT_BIN += $(sort $(wildcard resources/fonts/han/*.ttc))
@@ -176,10 +181,10 @@ FONT_BIN += $(sort $(wildcard resources/fonts/sil/*.cff))
 
 FONT_GEN := $(FONT_BIN:%=generated/%.c)
 
-generated/%.cff.c : %.cff $(HEXDUMP_EXE) ; $(QUIET_GEN) $(MKTGTDIR) ; $(HEXDUMP_EXE) -s $@ $<
-generated/%.otf.c : %.otf $(HEXDUMP_EXE) ; $(QUIET_GEN) $(MKTGTDIR) ; $(HEXDUMP_EXE) -s $@ $<
-generated/%.ttf.c : %.ttf $(HEXDUMP_EXE) ; $(QUIET_GEN) $(MKTGTDIR) ; $(HEXDUMP_EXE) -s $@ $<
-generated/%.ttc.c : %.ttc $(HEXDUMP_EXE) ; $(QUIET_GEN) $(MKTGTDIR) ; $(HEXDUMP_EXE) -s $@ $<
+generated/%.cff.c : %.cff $(HEXDUMP_SH) ; $(QUIET_GEN) $(MKTGTDIR) ; bash $(HEXDUMP_SH) > $@ $<
+generated/%.otf.c : %.otf $(HEXDUMP_SH) ; $(QUIET_GEN) $(MKTGTDIR) ; bash $(HEXDUMP_SH) > $@ $<
+generated/%.ttf.c : %.ttf $(HEXDUMP_SH) ; $(QUIET_GEN) $(MKTGTDIR) ; bash $(HEXDUMP_SH) > $@ $<
+generated/%.ttc.c : %.ttc $(HEXDUMP_SH) ; $(QUIET_GEN) $(MKTGTDIR) ; bash $(HEXDUMP_SH) > $@ $<
 
 ifeq ($(HAVE_OBJCOPY),yes)
   MUPDF_OBJ += $(FONT_BIN:%=$(OUT)/%.o)

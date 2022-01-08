@@ -518,20 +518,23 @@ pdf_create_link(fz_context *ctx, pdf_page *page, fz_rect bbox, const char *uri)
 	fz_link **linkp;
 	fz_rect page_mediabox;
 	fz_matrix page_ctm;
+	fz_rect rect;
 
 	fz_var(link);
 	fz_var(ind_obj);
 	fz_var(bs);
 	fz_var(a);
 
-	pdf_page_transform(ctx, page, &page_mediabox, &page_ctm);
-	page_ctm = fz_invert_matrix(page_ctm);
-	bbox = fz_transform_rect(bbox, page_ctm);
+	pdf_begin_operation(ctx, page->doc, "Create Link");
 
 	fz_try(ctx)
 	{
 		int ind_obj_num;
 		pdf_obj *annot_arr;
+
+	pdf_page_transform(ctx, page, &page_mediabox, &page_ctm);
+	page_ctm = fz_invert_matrix(page_ctm);
+		rect = fz_transform_rect(bbox, page_ctm);
 
 		annot_arr = pdf_dict_get(ctx, page->obj, PDF_NAME(Annots));
 		if (annot_arr == NULL)
@@ -542,19 +545,15 @@ pdf_create_link(fz_context *ctx, pdf_page *page, fz_rect bbox, const char *uri)
 
 		pdf_dict_put(ctx, annot_obj, PDF_NAME(Type), PDF_NAME(Annot));
 		pdf_dict_put(ctx, annot_obj, PDF_NAME(Subtype), PDF_NAME(Link));
-		pdf_dict_put_rect(ctx, annot_obj, PDF_NAME(Rect), bbox);
+		pdf_dict_put_rect(ctx, annot_obj, PDF_NAME(Rect), rect);
 		bs = pdf_new_dict(ctx, doc, 4);
 		pdf_dict_put(ctx, bs, PDF_NAME(S), PDF_NAME(S));
 		pdf_dict_put(ctx, bs, PDF_NAME(Type), PDF_NAME(Border));
 		pdf_dict_put_int(ctx, bs, PDF_NAME(W), 0);
 		pdf_dict_put(ctx, annot_obj, PDF_NAME(BS), bs);
-		if (uri)
-		{
-			a = pdf_new_dict(ctx, doc, 2);
-			pdf_dict_put(ctx, a, PDF_NAME(S), PDF_NAME(URI));
-			pdf_dict_put_text_string(ctx, a, PDF_NAME(URI), uri);
-			pdf_dict_put(ctx, annot_obj, PDF_NAME(A), a);
-		}
+
+		pdf_dict_put_drop(ctx, annot_obj, PDF_NAME(A),
+			pdf_new_action_from_link(ctx, doc, uri));
 
 		/*
 			Both annotation object and annotation structure are now created.
@@ -577,10 +576,10 @@ pdf_create_link(fz_context *ctx, pdf_page *page, fz_rect bbox, const char *uri)
 	}
 	fz_always(ctx)
 	{
-		pdf_drop_obj(ctx, a);
 		pdf_drop_obj(ctx, bs);
 		pdf_drop_obj(ctx, annot_obj);
 		pdf_drop_obj(ctx, ind_obj);
+		pdf_end_operation(ctx, page->doc);
 	}
 	fz_catch(ctx)
 	{
@@ -2735,7 +2734,9 @@ int pdf_set_annot_field_value(fz_context *ctx, pdf_document *doc, pdf_annot *ann
 void
 pdf_set_annot_appearance(fz_context *ctx, pdf_annot *annot, const char *appearance, const char *state, fz_matrix ctm, fz_rect bbox, pdf_obj *res, fz_buffer *contents)
 {
-	pdf_obj *form, *ap, *app;
+	pdf_obj *form = NULL;
+	pdf_obj *ap, *app;
+	pdf_obj *app_name = NULL;
 
 	begin_annot_op(ctx, annot, "Set appearance stream");
 
@@ -2743,30 +2744,41 @@ pdf_set_annot_appearance(fz_context *ctx, pdf_annot *annot, const char *appearan
 		appearance = "N";
 
 	fz_var(form);
+	fz_var(app_name);
 
 	fz_try(ctx)
 	{
-		form = pdf_new_xobject(ctx, annot->page->doc, bbox, ctm, res, contents);
-		form = pdf_add_object_drop(ctx, annot->page->doc, form);
-
 		ap = pdf_dict_get(ctx, annot->obj, PDF_NAME(AP));
 		if (!ap)
 			ap = pdf_dict_put_dict(ctx, annot->obj, PDF_NAME(AP), 1);
 
 		if (!state)
-			pdf_dict_puts(ctx, ap, appearance, form);
+			form = pdf_keep_obj(ctx, pdf_dict_gets(ctx, ap, appearance));
 		else
 		{
 			if (strcmp(appearance, "N") && strcmp(appearance, "R") && strcmp(appearance, "D"))
 				fz_throw(ctx, FZ_ERROR_GENERIC, "Unknown annotation appearance");
 
-			app = pdf_dict_put_dict(ctx, ap, pdf_new_name(ctx, appearance), 2);
-			pdf_dict_puts(ctx, app, state, form);
+			app_name = pdf_new_name(ctx, appearance);
+			app = pdf_dict_get(ctx, ap, app_name);
+			if (!app)
+				app = pdf_dict_put_dict(ctx, ap, app_name, 2);
+			form = pdf_keep_obj(ctx, pdf_dict_gets(ctx, ap, appearance));
 		}
+		if (!form)
+			form = pdf_new_xobject(ctx, annot->page->doc, bbox, ctm, res, contents);
+		else
+			pdf_update_xobject(ctx, annot->page->doc, form, bbox, ctm, res, contents);
+
+		if (!state)
+			pdf_dict_puts(ctx, ap, appearance, form);
+		else
+			pdf_dict_puts(ctx, app, state, form);
 	}
 	fz_always(ctx)
 	{
 		pdf_drop_obj(ctx, form);
+		pdf_drop_obj(ctx, app_name);
 		end_annot_op(ctx, annot);
 	}
 	fz_catch(ctx)
