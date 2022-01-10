@@ -160,7 +160,6 @@ static void CloseDocumentInCurrentTab(WindowInfo*, bool keepUIEnabled = false, b
 static void UpdatePageInfoHelper(WindowInfo*, NotificationWnd* wnd = nullptr, int pageNo = -1);
 static void OnSidebarSplitterMove(SplitterMoveEvent*);
 static void OnFavSplitterMove(SplitterMoveEvent*);
-static void DownloadDebugSymbols();
 
 void SetCurrentLang(const char* langCode) {
     if (!langCode) {
@@ -4752,7 +4751,6 @@ static LRESULT FrameOnCommand(WindowInfo* win, HWND hwnd, UINT msg, WPARAM wp, L
             break;
 
         case CmdDebugDownloadSymbols:
-            DownloadDebugSymbols();
             break;
 
         case CmdDebugAnnotations:
@@ -5047,8 +5045,6 @@ static TempStr GetFileSizeAsStrTemp(std::string_view path) {
 }
 
 void GetProgramInfo(str::Str& s) {
-    auto d = ToUtf8Temp(gCrashFilePath);
-    s.AppendFmt("Crash file: %s\r\n", d.Get());
 
     auto exePathW = GetExePathTemp();
     auto exePath = ToUtf8Temp(exePathW.AsView());
@@ -5090,73 +5086,6 @@ void GetProgramInfo(str::Str& s) {
     }
 }
 
-bool CrashHandlerCanUseNet() {
-    return HasPermission(Perm::InternetAccess);
-}
-
-void ShowCrashHandlerMessage() {
-    log("ShowCrashHandlerMessage()\n");
-    // don't show a message box in restricted use, as the user most likely won't be
-    // able to do anything about it anyway and it's up to the application provider
-    // to fix the unexpected behavior (of which for a restricted set of documents
-    // there should be much less, anyway)
-    if (!HasPermission(Perm::DiskAccess)) {
-        log("ShowCrashHandlerMessage: skipping beacuse !HasPermission(Perm::DiskAccess)\n");
-        return;
-    }
-
-#if 0
-    int res = MessageBox(nullptr, _TR("Sorry, that shouldn't have happened!\n\nPlease press 'Cancel', if you want to help us fix the cause of this crash."), _TR("SumatraPDF crashed"), MB_ICONERROR | MB_OKCANCEL | MbRtlReadingMaybe());
-    if (IDCANCEL == res) {
-        LaunchBrowser(CRASH_REPORT_URL);
-    }
-#endif
-
-    const char* msg = "We're sorry, SumatraPDF crashed.\n\nPress 'Cancel' to see crash report.";
-    uint flags = MB_ICONERROR | MB_OK | MB_OKCANCEL | MbRtlReadingMaybe();
-    flags |= MB_SETFOREGROUND | MB_TOPMOST;
-
-    int res = MessageBoxA(nullptr, msg, "SumatraPDF crashed", flags);
-    if (IDCANCEL != res) {
-        return;
-    }
-    if (!gCrashFilePath) {
-        log("ShowCrashHandlerMessage: !gCrashFilePath\n");
-        return;
-    }
-    LaunchFile(gCrashFilePath, nullptr, L"open");
-    auto url = L"https://www.sumatrapdfreader.org/docs/Submit-crash-report.html";
-    LaunchFile(url, nullptr, L"open");
-}
-
-static WCHAR* GetSymbolsDir() {
-    if (IsRunningInPortableMode()) {
-        /* Use the same path as the binary */
-        return GetExeDir();
-    }
-    TempWstr dir = GetSpecialFolderTemp(CSIDL_LOCAL_APPDATA, true);
-    return path::Join(dir.Get(), GetAppNameTemp(), L"crashinfo");
-}
-
-static void DownloadDebugSymbols() {
-    // over-ride the default symbols directory to be more useful
-    WCHAR* symDir = GetSymbolsDir();
-    SetSymbolsDir(symDir);
-
-    bool ok = CrashHandlerDownloadSymbols();
-    char* msg = nullptr;
-    if (ok) {
-        auto symDirA = ToUtf8Temp(symDir);
-        msg = str::Format("Downloaded symbols! to %s", symDirA.Get());
-    } else {
-        msg = str::Dup("Failed to download symbols.");
-    }
-    uint flags = MB_ICONINFORMATION | MB_OK | MbRtlReadingMaybe();
-    MessageBoxA(nullptr, msg, "Downloading symbols", flags);
-
-    free(msg);
-    free(symDir);
-}
 
 void ShutdownCleanup() {
     gAllowedFileTypes.Reset();
