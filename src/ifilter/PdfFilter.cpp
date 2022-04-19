@@ -1,12 +1,13 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 #include "utils/BaseUtil.h"
 #include "utils/ScopedWin.h"
 #include "utils/WinUtil.h"
 
+#include "wingui/UIModels.h"
+
 #include "Annotation.h"
-#include "wingui/TreeModel.h"
 #include "DisplayMode.h"
 #include "Controller.h"
 #include "EngineBase.h"
@@ -18,7 +19,7 @@
 
 #include "utils/Log.h"
 
-void _submitDebugReportIfFunc(__unused bool cond, __unused const char* condStr) {
+void _uploadDebugReportIfFunc(__unused bool cond, __unused const char* condStr) {
     // no-op implementation to satisfy SubmitBugReport()
 }
 
@@ -86,7 +87,7 @@ static const char* PdfFilterStateToStr(PdfFilterState state) {
 HRESULT PdfFilter::GetNextChunkValue(ChunkValue& chunkValue) {
     const char* stateStr = PdfFilterStateToStr(m_state);
     logf("PdfFilter::GetNextChunkValue(), state: %s (%d)\n", stateStr, (int)m_state);
-    WCHAR* prop{nullptr};
+    WCHAR* prop = nullptr;
 
     switch (m_state) {
         case PdfFilterState::Start:

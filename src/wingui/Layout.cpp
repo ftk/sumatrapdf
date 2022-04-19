@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 #include "utils/BaseUtil.h"
@@ -981,7 +981,9 @@ Align::Align(ILayout* c) {
     kind = kindAlign;
 }
 
-Align::~Align() = default;
+Align::~Align() {
+    delete Child;
+}
 
 Size Align::Layout(const Constraints bc) {
     dbglayoutf("Align::Layout() ");
@@ -1108,4 +1110,112 @@ int Spacer::MinIntrinsicWidth(int height) {
 }
 void Spacer::SetBounds(Rect) {
     // do nothing
+}
+
+Kind kindTableLayout = "tableLayout";
+
+TableLayout::TableLayout() {
+    kind = kindTableLayout;
+}
+
+TableLayout::~TableLayout() {
+    int n = rows * cols;
+    for (int i = 0; i < n; i++) {
+        auto child = cells[i].child;
+        delete child;
+    }
+    free(cells);
+    free(maxColWidths);
+}
+
+Size TableLayout::Layout(Constraints bc) {
+    // TODO: implement me
+    CrashMe();
+    return {};
+}
+
+int TableLayout::MinIntrinsicHeight(int width) {
+    // calc max height of each row, min height is sum of those
+    int minHeight = 0;
+    for (int row = 0; row < rows; row++) {
+        int maxRowHeight = 0;
+        for (int col = 0; col < cols; col++) {
+            ILayout* el = GetCell(row, col);
+            if (!el || IsCollapsed(el)) {
+                continue;
+            }
+            // TODO: width should probably be different for each cell
+            // i.e. if it's non-infinite then use width / cols or some
+            // more complicated scheme for non-uniformly sized columns
+            // or maybe not
+            int h = el->MinIntrinsicHeight(width);
+            if (h > maxRowHeight) {
+                maxRowHeight = h;
+            }
+        }
+        minHeight += maxRowHeight;
+    }
+    return minHeight;
+}
+
+int TableLayout::MinIntrinsicWidth(int height) {
+    // calc max width of each column, min width is sum of those
+    int minWidth = 0;
+    for (int col = 0; col < cols; col++) {
+        int maxColWidth = 0;
+        for (int row = 0; row < rows; row++) {
+            ILayout* el = GetCell(row, col);
+            if (!el || IsCollapsed(el)) {
+                continue;
+            }
+            // TODO: height should probably be different for each cell
+            // i.e. if it's non-infinite then use height / rows or some
+            // more complicated scheme for non-uniformly sized rows
+            // or maybe not
+            int h = el->MinIntrinsicWidth(height);
+            if (h > maxColWidth) {
+                maxColWidth = h;
+            }
+        }
+        minWidth += maxColWidth;
+    }
+    return minWidth;
+}
+
+void TableLayout::SetBounds(Rect) {
+    // TODO: implement me
+    CrashMe();
+}
+
+void TableLayout::SetSize(int rows, int cols) {
+    CrashIf(cells);     // TODO: maybe allow re-sizing
+    CrashIf(rows <= 0); // TODO: maybe allow empty
+    CrashIf(cols <= 0); // TODO: maybe allow empty
+    int n = rows * cols;
+    cells = AllocArray<Cell>(n);
+    maxColWidths = AllocArray<int>(cols);
+}
+
+int TableLayout::CellIdx(int row, int col) {
+    CrashIf(!cells);
+    CrashIf(row < 0 || row >= rows);
+    CrashIf(col < 0 || col >= cols);
+    int idx = col * cols + row;
+    return idx;
+}
+
+void TableLayout::SetCell(int row, int col, ILayout* child) {
+    int idx = CellIdx(row, col);
+    auto& cell = cells[idx];
+    if (cell.child) {
+        // delete existing child
+        delete cell.child;
+    }
+    cell.child = child;
+}
+
+ILayout* TableLayout::GetCell(int row, int col) {
+    int idx = CellIdx(row, col);
+    auto child = cells[idx].child;
+    return child;
 }

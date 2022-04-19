@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 #include "utils/BaseUtil.h"
@@ -12,8 +12,9 @@
 #include "mui/Mui.h"
 #include "utils/WinUtil.h"
 
+#include "wingui/UIModels.h"
+
 #include "Annotation.h"
-#include "wingui/TreeModel.h"
 #include "DisplayMode.h"
 #include "Controller.h"
 #include "EngineBase.h"
@@ -24,8 +25,6 @@
 #include "Theme.h"
 #include "GlobalPrefs.h"
 #include "AppColors.h"
-#include "ProgressUpdateUI.h"
-#include "Notifications.h"
 #include "SumatraConfig.h"
 #include "SumatraPDF.h"
 #include "WindowInfo.h"
@@ -42,19 +41,22 @@
 #include "Translations.h"
 #include "Toolbar.h"
 #include "EditAnnotations.h"
+#include "Accelerators.h"
+
+#include "utils/Log.h"
 
 // SumatraPDF.cpp
 extern Vec<Annotation*> MakeAnnotationFromSelection(TabInfo* tab, AnnotationType annotType);
 
 struct BuildMenuCtx {
-    TabInfo* tab{nullptr};
-    bool isCbx{false};
-    bool hasSelection{false};
-    bool supportsAnnotations{false};
-    Annotation* annotationUnderCursor{nullptr};
-    bool hasUnsavedAnnotations{false};
-    bool isCursorOnPage{false};
-    bool canSendEmail{false};
+    TabInfo* tab = nullptr;
+    bool isCbx = false;
+    bool hasSelection = false;
+    bool supportsAnnotations = false;
+    Annotation* annotationUnderCursor = nullptr;
+    bool hasUnsavedAnnotations = false;
+    bool isCursorOnPage = false;
+    bool canSendEmail = false;
     ~BuildMenuCtx();
 };
 
@@ -64,18 +66,18 @@ BuildMenuCtx::~BuildMenuCtx() {
 
 // value associated with menu item for owner-drawn purposes
 struct MenuOwnerDrawInfo {
-    const WCHAR* text{nullptr};
+    const WCHAR* text = nullptr;
     // copy of MENUITEMINFO fields
-    uint fType{0};
-    uint fState{0};
-    HBITMAP hbmpChecked{nullptr};
-    HBITMAP hbmpUnchecked{nullptr};
-    HBITMAP hbmpItem{nullptr};
+    uint fType = 0;
+    uint fState = 0;
+    HBITMAP hbmpChecked = nullptr;
+    HBITMAP hbmpUnchecked = nullptr;
+    HBITMAP hbmpItem = nullptr;
 };
 
 struct MenuDef {
-    const char* title{nullptr};
-    UINT_PTR idOrSubmenu{0};
+    const char* title = nullptr;
+    UINT_PTR idOrSubmenu = 0;
 };
 
 constexpr const char* kMenuSeparator = "-----";
@@ -139,17 +141,17 @@ MenuDef menuDefContextFav[] = {{_TRN("Remove from favorites"), CmdFavoriteDel},
 //[ ACCESSKEY_GROUP File Menu
 static MenuDef menuDefFile[] = {
     {
-        _TRN("New &window\tCtrl+N"),
+        _TRN("New &window"),
         CmdNewWindow,
     },
     {
-        _TRN("&Open...\tCtrl+O"),
-        CmdOpen,
+        _TRN("&Open..."),
+        CmdOpenFile,
     },
     // TODO: should make it available for everyone?
     //{ "Open Folder",                        CmdOpenFolder,             },
     {
-        _TRN("&Close\tCtrl+W"),
+        _TRN("&Close"),
         CmdClose,
     },
     {
@@ -157,7 +159,7 @@ static MenuDef menuDefFile[] = {
         CmdShowInFolder,
     },
     {
-        _TRN("&Save As...\tCtrl+S"),
+        _TRN("&Save As..."),
         CmdSaveAs,
     },
     {
@@ -167,19 +169,19 @@ static MenuDef menuDefFile[] = {
 //[ ACCESSKEY_ALTERNATIVE // only one of these two will be shown
 #ifdef ENABLE_SAVE_SHORTCUT
     {
-        _TRN("Save S&hortcut...\tCtrl+Shift+S"),
+        _TRN("Save S&hortcut..."),
         CmdSaveAsBookmark,
     },
 //| ACCESSKEY_ALTERNATIVE
 #else
     {
-        _TRN("Re&name...\tF2"),
+        _TRN("Re&name..."),
         CmdRenameFile,
     },
 #endif
     //] ACCESSKEY_ALTERNATIVE
     {
-        _TRN("&Print...\tCtrl+P"),
+        _TRN("&Print..."),
         CmdPrint,
     },
     {
@@ -220,7 +222,7 @@ static MenuDef menuDefFile[] = {
         0,
     },
     {
-        _TRN("P&roperties\tCtrl+D"),
+        _TRN("P&roperties"),
         CmdProperties,
     },
     {
@@ -228,7 +230,7 @@ static MenuDef menuDefFile[] = {
         0,
     },
     {
-        _TRN("E&xit\tCtrl+Q"),
+        _TRN("E&xit"),
         CmdExit,
     },
     {
@@ -241,15 +243,19 @@ static MenuDef menuDefFile[] = {
 //[ ACCESSKEY_GROUP View Menu
 static MenuDef menuDefView[] = {
     {
-        _TRN("&Single Page\tCtrl+6"),
+        _TRN("Command Palette"),
+        CmdCommandPalette,
+    },
+    {
+        _TRN("&Single Page"),
         CmdViewSinglePage,
     },
     {
-        _TRN("&Facing\tCtrl+7"),
+        _TRN("&Facing"),
         CmdViewFacing,
     },
     {
-        _TRN("&Book View\tCtrl+8"),
+        _TRN("&Book View"),
         CmdViewBook,
     },
     {
@@ -266,11 +272,11 @@ static MenuDef menuDefView[] = {
         0,
     },
     {
-        _TRN("Rotate &Left\tCtrl+Shift+-"),
+        _TRN("Rotate &Left"),
         CmdViewRotateLeft,
     },
     {
-        _TRN("Rotate &Right\tCtrl+Shift++"),
+        _TRN("Rotate &Right"),
         CmdViewRotateRight,
     },
     {
@@ -278,28 +284,28 @@ static MenuDef menuDefView[] = {
         0,
     },
     {
-        _TRN("Pr&esentation\tF5"),
-        CmdViewPresentationMode,
+        _TRN("Pr&esentation"),
+        CmdTogglePresentationMode,
     },
     {
-        _TRN("F&ullscreen\tF11"),
-        CmdViewFullScreen,
+        _TRN("F&ullscreen"),
+        CmdToggleFullscreen,
     },
     {
         kMenuSeparator,
         0,
     },
     {
-        _TRN("Show Book&marks\tF12"),
+        _TRN("Show Book&marks"),
         CmdViewBookmarks,
     },
     {
-        _TRN("Show &Toolbar\tF8"),
-        CmdViewShowHideToolbar,
+        _TRN("Show &Toolbar"),
+        CmdToggleToolbar,
     },
     {
         _TRN("Show Scr&ollbars"),
-        CmdViewShowHideScrollbars,
+        CmdToggleScrollbars,
     },
     {
         nullptr,
@@ -311,23 +317,23 @@ static MenuDef menuDefView[] = {
 //[ ACCESSKEY_GROUP GoTo Menu
 static MenuDef menuDefGoTo[] = {
     {
-        _TRN("&Next Page\tRight Arrow"),
+        _TRN("&Next Page"),
         CmdGoToNextPage,
     },
     {
-        _TRN("&Previous Page\tLeft Arrow"),
+        _TRN("&Previous Page"),
         CmdGoToPrevPage,
     },
     {
-        _TRN("&First Page\tHome"),
+        _TRN("&First Page"),
         CmdGoToFirstPage,
     },
     {
-        _TRN("&Last Page\tEnd"),
+        _TRN("&Last Page"),
         CmdGoToLastPage,
     },
     {
-        _TRN("Pa&ge...\tCtrl+G"),
+        _TRN("Pa&ge..."),
         CmdGoToPage,
     },
     {
@@ -335,19 +341,19 @@ static MenuDef menuDefGoTo[] = {
         0,
     },
     {
-        _TRN("&Back\tAlt+Left Arrow"),
-        CmdGoToNavBack,
+        _TRN("&Back"),
+        CmdNavigateBack,
     },
     {
-        _TRN("F&orward\tAlt+Right Arrow"),
-        CmdGoToNavForward,
+        _TRN("F&orward"),
+        CmdNavigateForward,
     },
     {
         kMenuSeparator,
         0,
     },
     {
-        _TRN("Fin&d...\tCtrl+F"),
+        _TRN("Fin&d..."),
         CmdFindFirst,
     },
     {
@@ -360,23 +366,23 @@ static MenuDef menuDefGoTo[] = {
 //[ ACCESSKEY_GROUP Zoom Menu
 static MenuDef menuDefZoom[] = {
     {
-        _TRN("Fit &Page\tCtrl+0"),
+        _TRN("Fit &Page"),
         CmdZoomFitPage,
     },
     {
-        _TRN("&Actual Size\tCtrl+1"),
+        _TRN("&Actual Size"),
         CmdZoomActualSize,
     },
     {
-        _TRN("Fit &Width\tCtrl+2"),
+        _TRN("Fit &Width"),
         CmdZoomFitWidth,
     },
     {
-        _TRN("Fit &Content\tCtrl+3"),
+        _TRN("Fit &Content"),
         CmdZoomFitContent,
     },
     {
-        _TRN("Custom &Zoom...\tCtrl+Y"),
+        _TRN("Custom &Zoom..."),
         CmdZoomCustom,
     },
     {
@@ -565,7 +571,7 @@ static MenuDef menuDefSelection[] = {
         CmdSearchSelectionWithBing,
     },
     {
-        _TRN("Select &All\tCtrl+A"),
+        _TRN("Select &All"),
         CmdSelectAll,
     },
     {
@@ -578,7 +584,7 @@ static MenuDef menuDefSelection[] = {
 //[ ACCESSKEY_GROUP Menu (Selection)
 static MenuDef menuDefMainSelection[] = {
     {
-        _TRN("&Copy To Clipboard\tCtrl-C"),
+        _TRN("&Copy To Clipboard"),
         CmdCopySelection,
     },
     {
@@ -598,7 +604,7 @@ static MenuDef menuDefMainSelection[] = {
         CmdSearchSelectionWithBing,
     },
     {
-        _TRN("Select &All\tCtrl+A"),
+        _TRN("Select &All"),
         CmdSelectAll,
     },
     {
@@ -656,11 +662,11 @@ static MenuDef menuDefMenubar[] = {
 //[ ACCESSKEY_GROUP Context Menu (Create annot from selection)
 static MenuDef menuDefCreateAnnotFromSelection[] = {
     {
-        _TRN("&Highlight\ta"),
+        _TRN("&Highlight"),
         CmdCreateAnnotHighlight,
     },
     {
-        _TRN("&Underline\tu"),
+        _TRN("&Underline"),
         CmdCreateAnnotUnderline,
     },
     {
@@ -714,7 +720,7 @@ static MenuDef menuDefCreateAnnotUnderCursor[] = {
 //[ ACCESSKEY_GROUP Context Menu (Content)
 static MenuDef menuDefContext[] = {
     {
-        _TRN("&Copy Selection \tCtrl-C"),
+        _TRN("&Copy Selection"),
         CmdCopySelection,
     },
     {
@@ -747,16 +753,16 @@ static MenuDef menuDefContext[] = {
         CmdFavoriteToggle,
     },
     {
-        _TRN("Show &Bookmarks\tF12"),
+        _TRN("Show &Bookmarks"),
         CmdViewBookmarks,
     },
     {
-        _TRN("Show &Toolbar\tF8"),
-        CmdViewShowHideToolbar,
+        _TRN("Show &Toolbar"),
+        CmdToggleToolbar,
     },
     {
         _TRN("Show &Scrollbars"),
-        CmdViewShowHideScrollbars,
+        CmdToggleScrollbars,
     },
     {
         kMenuSeparator,
@@ -788,7 +794,7 @@ static MenuDef menuDefContext[] = {
     },
     {
         _TRN("E&xit Fullscreen"),
-        CmdExitFullScreen,
+        CmdToggleFullscreen, // only seen in full-screen mode
     },
     {
         nullptr,
@@ -832,8 +838,8 @@ static UINT_PTR disableIfNoDocument[] = {
     CmdGoToPrevPage,
     CmdGoToFirstPage,
     CmdGoToLastPage,
-    CmdGoToNavBack,
-    CmdGoToNavForward,
+    CmdNavigateBack,
+    CmdNavigateForward,
     CmdGoToPage,
     CmdFindFirst,
     CmdSaveAs,
@@ -841,7 +847,7 @@ static UINT_PTR disableIfNoDocument[] = {
     CmdSendByEmail,
     CmdSelectAll,
     CmdProperties,
-    CmdViewPresentationMode,
+    CmdTogglePresentationMode,
     CmdOpenWithAcrobat,
     CmdOpenWithFoxIt,
     CmdOpenWithPdfXchange,
@@ -898,8 +904,8 @@ static UINT_PTR removeIfNoInternetPerms[] = {
 };
 
 static UINT_PTR removeIfNoFullscreenPerms[] = {
-    CmdViewPresentationMode,
-    CmdViewFullScreen,
+    CmdTogglePresentationMode,
+    CmdToggleFullscreen,
 };
 
 static UINT_PTR removeIfNoPrefsPerms[] = {
@@ -931,7 +937,7 @@ static UINT_PTR removeIfNoCopyPerms[] = {
 // TODO: all prefs params also fall under disk access
 static UINT_PTR removeIfNoDiskAccessPerm[] = {
     CmdNewWindow, // ???
-    CmdOpen,
+    CmdOpenFile,
     CmdOpenFolder,
     CmdClose, // ???
     CmdShowInFolder,
@@ -978,8 +984,8 @@ static UINT_PTR rmoveIfChm[] = {
     CmdViewContinuous,
     CmdViewRotateLeft,
     CmdViewRotateRight,
-    CmdViewPresentationMode,
-    CmdViewShowHideScrollbars,
+    CmdTogglePresentationMode,
+    CmdToggleScrollbars,
     CmdZoomFitPage,
     CmdZoomActualSize,
     CmdZoomFitWidth,
@@ -1220,6 +1226,118 @@ static void RebuildFileMenu(TabInfo* tab, HMENU menu) {
     RemoveBadMenuSeparators(menu);
 }
 
+static void AppendAccelKeyToMenuString(str::WStr& str, const ACCEL& a) {
+    auto lang = trans::GetCurrentLangCode();
+    bool isEng = str::IsEmpty(lang) || str::Eq(lang, "en");
+    bool isGerman = str::Eq(lang, "de");
+
+    str.Append(L"\t"); // marks start of an accelerator in menu item
+    BYTE virt = a.fVirt;
+    if (virt & FALT) {
+        const WCHAR* s = L"Alt+";
+        if (isGerman) {
+            s = L"Größe";
+        }
+        str.Append(s);
+    }
+    if (virt & FCONTROL) {
+        const WCHAR* s = L"Ctrl+";
+        if (isGerman) {
+            s = L"Strg";
+        }
+        str.Append(s);
+    }
+    if (virt & FSHIFT) {
+        const WCHAR* s = L"Shift+";
+        if (isGerman) {
+            s = L"Umschalt";
+        }
+        str.Append(s);
+    }
+    bool isVirt = virt & FVIRTKEY;
+    BYTE key = a.key;
+
+    if (isVirt && key >= VK_F1 && key <= VK_F24) {
+        int n = key - VK_F1 + 1;
+        str.AppendFmt(L"F%d", n);
+        return;
+    }
+    if (isVirt && key >= VK_NUMPAD0 && key <= VK_NUMPAD9) {
+        WCHAR c = (WCHAR)key - VK_NUMPAD0 + '0';
+        str.AppendChar(c);
+        return;
+    }
+
+    // virtual codes overlap with some ascii chars like '-' is VK_INSERT
+    // so for non-virtual assume it's a single char
+    bool isAscii = (key >= 'A' && key <= 'Z') || (key >= 'a' && key <= 'z') || (key >= '0' && key <= '9');
+    if (isAscii || !isVirt) {
+        WCHAR c = (WCHAR)key;
+        str.AppendChar(c);
+        return;
+    }
+
+    // https://docs.microsoft.com/en-us/windows/win32/inputdev/virtual-key-codes
+    // Note: might need to add if we add more shortcuts
+    const WCHAR* keyStr = nullptr;
+    switch (key) {
+        case VK_END:
+            keyStr = L"End";
+            break;
+        case VK_HOME:
+            keyStr = L"Home";
+            break;
+        case VK_LEFT:
+            keyStr = L"Left";
+            if (!isEng) {
+                keyStr = L"<-";
+            }
+            break;
+        case VK_RIGHT:
+            keyStr = L"Right";
+            if (!isEng) {
+                keyStr = L"->";
+            }
+            break;
+        case VK_UP:
+            keyStr = L"Up";
+            break;
+        case VK_DOWN:
+            keyStr = L"Down";
+            break;
+        case VK_BACK:
+            keyStr = L"Backspace";
+            break;
+        case VK_DELETE:
+            keyStr = L"Del";
+            break;
+        case VK_INSERT:
+            keyStr = L"Insert";
+            break;
+        case VK_ESCAPE:
+            keyStr = L"Esc";
+            break;
+        case VK_ADD:
+        case VK_OEM_PLUS:
+            keyStr = L"+";
+            break;
+        case VK_SUBTRACT:
+        case VK_OEM_MINUS:
+            keyStr = L"-";
+            break;
+        case VK_SPACE:
+            keyStr = L"Space";
+            break;
+        case VK_RETURN:
+            keyStr = L"Return";
+            break;
+    }
+    CrashIf(!keyStr);
+    if (keyStr) {
+        str.Append(keyStr);
+    }
+}
+
 HMENU BuildMenuFromMenuDef(MenuDef* menuDef, HMENU menu, BuildMenuCtx* ctx) {
     CrashIf(!menu);
 
@@ -1231,6 +1349,7 @@ HMENU BuildMenuFromMenuDef(MenuDef* menuDef, HMENU menu, BuildMenuCtx* ctx) {
         AppendSelectionHandlersToMenu(menu, ctx ? ctx->hasSelection : false);
     }
 
+    ACCEL accel;
     while (true) {
         MenuDef md = menuDef[i];
         if (md.title == nullptr) { // sentinel
@@ -1312,11 +1431,18 @@ HMENU BuildMenuFromMenuDef(MenuDef* menuDef, HMENU menu, BuildMenuCtx* ctx) {
             }
             AppendMenuW(menu, flags, (UINT_PTR)subMenu, title);
         } else {
+            str::WStr title2 = title;
+            if (GetAccelByCmd(cmdId, accel)) {
+                // if this is an accelerator, append it to menu
+                if (!str::Find(title, L"\t")) {
+                    AppendAccelKeyToMenuString(title2, accel);
+                }
+            }
             UINT flags = MF_STRING | (disableMenu ? MF_DISABLED : MF_ENABLED);
-            AppendMenuW(menu, flags, md.idOrSubmenu, title);
+            AppendMenuW(menu, flags, md.idOrSubmenu, title2.Get());
         }
 
-        if (cmdId == CmdOpenWithHtmlHelp) {
+        if (cmdId == CmdOpenWithHtmlHelp && ctx) {
             TabInfo* tab = ctx->tab;
             AppendExternalViewersToMenu(menu, tab ? tab->filePath.Get() : nullptr);
         }
@@ -1494,14 +1620,14 @@ static void MenuUpdateStateForWindow(WindowInfo* win) {
     win::menu::SetChecked(win->menu, CmdViewBookmarks, checked);
 
     win::menu::SetChecked(win->menu, CmdFavoriteToggle, gGlobalPrefs->showFavorites);
-    win::menu::SetChecked(win->menu, CmdViewShowHideToolbar, gGlobalPrefs->showToolbar);
-    win::menu::SetChecked(win->menu, CmdViewShowHideScrollbars, !gGlobalPrefs->fixedPageUI.hideScrollbars);
+    win::menu::SetChecked(win->menu, CmdToggleToolbar, gGlobalPrefs->showToolbar);
+    win::menu::SetChecked(win->menu, CmdToggleScrollbars, !gGlobalPrefs->fixedPageUI.hideScrollbars);
     MenuUpdateDisplayMode(win);
     MenuUpdateZoom(win);
 
     if (win->IsDocLoaded() && tab) {
-        win::menu::SetEnabled(win->menu, CmdGoToNavBack, tab->ctrl->CanNavigate(-1));
-        win::menu::SetEnabled(win->menu, CmdGoToNavForward, tab->ctrl->CanNavigate(1));
+        win::menu::SetEnabled(win->menu, CmdNavigateBack, tab->ctrl->CanNavigate(-1));
+        win::menu::SetEnabled(win->menu, CmdNavigateForward, tab->ctrl->CanNavigate(1));
     }
 
     // TODO: is this check too expensive?
@@ -1629,7 +1755,7 @@ void OnWindowContextMenu(WindowInfo* win, int x, int y) {
 
     bool isFullScreen = win->isFullScreen || win->presentation;
     if (!isFullScreen) {
-        win::menu::Remove(popup, CmdExitFullScreen);
+        win::menu::Remove(popup, CmdToggleFullscreen);
     }
     SetMenuStateForSelection(tab, popup);
 
@@ -1637,7 +1763,7 @@ void OnWindowContextMenu(WindowInfo* win, int x, int y) {
     win::menu::SetEnabled(popup, CmdViewBookmarks, win->ctrl->HacToc());
     win::menu::SetChecked(popup, CmdViewBookmarks, win->tocVisible);
 
-    win::menu::SetChecked(popup, CmdViewShowHideScrollbars, !gGlobalPrefs->fixedPageUI.hideScrollbars);
+    win::menu::SetChecked(popup, CmdToggleScrollbars, !gGlobalPrefs->fixedPageUI.hideScrollbars);
 
     win::menu::SetEnabled(popup, CmdFavoriteToggle, HasFavorites());
     win::menu::SetChecked(popup, CmdFavoriteToggle, gGlobalPrefs->showFavorites);
@@ -1671,7 +1797,7 @@ void OnWindowContextMenu(WindowInfo* win, int x, int y) {
 
     // if toolbar is not shown, add option to show it
     if (gGlobalPrefs->showToolbar) {
-        win::menu::Remove(popup, CmdViewShowHideToolbar);
+        win::menu::Remove(popup, CmdToggleToolbar);
     }
     RemoveBadMenuSeparators(popup);
 
@@ -1702,9 +1828,11 @@ void OnWindowContextMenu(WindowInfo* win, int x, int y) {
         case CmdViewBookmarks:
         case CmdFavoriteToggle:
         case CmdProperties:
-        case CmdViewShowHideToolbar:
-        case CmdViewShowHideScrollbars:
+        case CmdToggleToolbar:
+        case CmdToggleScrollbars:
         case CmdSaveAnnotations:
+        case CmdFavoriteAdd:
+        case CmdToggleFullscreen:
             // handle in FrameOnCommand() in SumatraPDF.cpp
             HwndSendCommand(win->hwndFrame, cmd);
             break;
@@ -1737,15 +1865,10 @@ void OnWindowContextMenu(WindowInfo* win, int x, int y) {
                 delete bmp;
             }
             break;
-        case CmdFavoriteAdd:
-            AddFavoriteForCurrentPage(win);
-            break;
         case CmdFavoriteDel:
             DelFavorite(filePath, pageNoUnderCursor);
             break;
-        case CmdExitFullScreen:
-            ExitFullScreen(win);
-            break;
+        // Note: duplicated in OnWindowContextMenu because slightly different handling
         case CmdCreateAnnotText:
         case CmdCreateAnnotFreeText:
         case CmdCreateAnnotStamp:
@@ -1778,6 +1901,7 @@ void OnWindowContextMenu(WindowInfo* win, int x, int y) {
             break;
     }
     if (!createdAnnots.empty()) {
+        // TODO: leaking createdAnnots?
         StartEditAnnotations(tab, createdAnnots);
     }
     // TODO: should delete it?
@@ -1819,7 +1943,7 @@ static HFONT gMenuFont = nullptr;
 
 HFONT GetMenuFont() {
     if (!gMenuFont) {
-        NONCLIENTMETRICS ncm = {0};
+        NONCLIENTMETRICS ncm{};
         ncm.cbSize = sizeof(ncm);
         SystemParametersInfo(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, 0);
         gMenuFont = CreateFontIndirect(&ncm.lfMenuFont);
@@ -1857,7 +1981,7 @@ static void ParseMenuText(WCHAR* s, MenuText& mt) {
 }
 
 void FreeMenuOwnerDrawInfoData(HMENU hmenu) {
-    MENUITEMINFOW mii = {0};
+    MENUITEMINFOW mii{};
     mii.cbSize = sizeof(MENUITEMINFOW);
 
     int n = GetMenuItemCount(hmenu);
@@ -1883,7 +2007,7 @@ void MarkMenuOwnerDraw(HMENU hmenu) {
     }
     WCHAR buf[1024];
 
-    MENUITEMINFOW mii = {0};
+    MENUITEMINFOW mii{};
     mii.cbSize = sizeof(MENUITEMINFOW);
 
     int n = GetMenuItemCount(hmenu);

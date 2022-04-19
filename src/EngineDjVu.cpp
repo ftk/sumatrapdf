@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 // hack to prevent libdjvu from being built as an export/import library
@@ -15,8 +15,9 @@
 #include "utils/GuessFileType.h"
 #include "utils/WinUtil.h"
 
+#include "wingui/UIModels.h"
+
 #include "SumatraConfig.h"
-#include "wingui/TreeModel.h"
 #include "DisplayMode.h"
 #include "Controller.h"
 #include "EngineBase.h"
@@ -61,8 +62,8 @@ static bool CouldBeURL(const char* link) {
 }
 
 struct PageDestinationDjVu : IPageDestination {
-    const char* link{nullptr};
-    WCHAR* value{nullptr};
+    const char* link = nullptr;
+    WCHAR* value = nullptr;
 
     PageDestinationDjVu(const char* l, const char* comment) {
         kind = kindDestinationDjVu;
@@ -233,7 +234,7 @@ struct DjVuPageInfo {
     RectF mediabox;
     Vec<IPageElement*> allElements;
     miniexp_t annos{miniexp_dummy};
-    bool gotAllElements{false};
+    bool gotAllElements = false;
 };
 
 class EngineDjVu : public EngineBase {
@@ -274,11 +275,11 @@ class EngineDjVu : public EngineBase {
     static EngineBase* CreateFromStream(IStream* stream);
 
   protected:
-    IStream* stream{nullptr};
+    IStream* stream = nullptr;
 
     Vec<DjVuPageInfo*> pages;
 
-    ddjvu_document_t* doc{nullptr};
+    ddjvu_document_t* doc = nullptr;
     miniexp_t outline = miniexp_nil;
     TocTree* tocTree = nullptr;
 

@@ -1,5 +1,5 @@
 
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 #include "utils/BaseUtil.h"
@@ -133,8 +133,7 @@ static Kind GetKindByFileExt(const WCHAR* path) {
             }
             return gExtsKind[idx];
         }
-        curr = seqstrings::SkipStr(curr);
-        idx++;
+        seqstrings::Next(curr, idx);
     }
     return nullptr;
 }
@@ -369,7 +368,7 @@ Kind GuessFileTypeFromContent(const WCHAR* path) {
     }
 
     // +1 for zero-termination
-    char buf[2048 + 1] = {0};
+    char buf[2048 + 1]{};
     int n = file::ReadN(path, buf, dimof(buf) - 1);
     if (n <= 0) {
         return nullptr;

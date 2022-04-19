@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 class HtmlPullParser;
@@ -7,7 +7,7 @@ struct HtmlToken;
 struct ImageData {
     ByteSlice base;
     // path by which content refers to this image
-    char* fileName{nullptr};
+    char* fileName = nullptr;
     // document specific id by whcih to find this image
     size_t fileId{0};
 };

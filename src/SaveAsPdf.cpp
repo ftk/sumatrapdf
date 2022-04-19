@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 extern "C" {
@@ -13,9 +13,10 @@ extern "C" {
 #include "utils/WinUtil.h"
 #include "utils/Dpi.h"
 
+#include "wingui/UIModels.h"
+
 #include "resource.h"
 #include "Commands.h"
-#include "wingui/TreeModel.h"
 #include "DisplayMode.h"
 #include "Controller.h"
 #include "EngineBase.h"
@@ -65,7 +66,7 @@ struct PdfMerger {
     fz_context* ctx = nullptr;
     pdf_document* doc_des = nullptr;
     pdf_document* doc_src = nullptr;
-    VecStr filePaths;
+    StrVec filePaths;
 
     PdfMerger() = default;
     ~PdfMerger();
@@ -150,7 +151,7 @@ bool PdfMerger::MergeAndSave(TocItem* root, char* dstPath) {
             return true;
         }
         std::string_view path = ti->engineFilePath;
-        filePaths.Append(path);
+        filePaths.Append(path.data());
         return true;
     });
 

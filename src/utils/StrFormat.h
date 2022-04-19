@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 /*
@@ -72,7 +72,7 @@ struct Arg {
         double d;
         std::string_view sv;
         std::wstring_view wsv;
-    } u = {0};
+    } u{};
 
     Arg() = default;
 
@@ -122,14 +122,14 @@ struct Fmt {
 
     std::string_view Eval(const Arg** args, int nArgs);
 
-    bool isOk{true}; // true if mismatch between formatting instruction and args
+    bool isOk = true; // true if mismatch between formatting instruction and args
 
-    const char* format{nullptr};
+    const char* format = nullptr;
     Inst instructions[32]; // 32 should be big enough for everybody
-    int nInst{0};
+    int nInst = 0;
 
-    int currArgNo{0};
-    int currPercArgNo{0};
+    int currArgNo = 0;
+    int currPercArgNo = 0;
     str::Str res;
 };
 

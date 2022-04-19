@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 #include "utils/BaseUtil.h"
@@ -10,14 +10,12 @@
 #include "utils/UITask.h"
 #include "utils/WinUtil.h"
 
-#include "wingui/WinGui.h"
+#include "wingui/UIModels.h"
+
 #include "wingui/Layout.h"
 #include "wingui/Window.h"
 #include "wingui/LabelWithCloseWnd.h"
-#include "wingui/SplitterWnd.h"
-#include "wingui/TreeModel.h"
 #include "wingui/TreeCtrl.h"
-#include "wingui/DropDownCtrl.h"
 
 #include "Annotation.h"
 #include "DisplayMode.h"
@@ -28,8 +26,6 @@
 #include "SettingsStructs.h"
 #include "GlobalPrefs.h"
 #include "AppColors.h"
-#include "ProgressUpdateUI.h"
-#include "Notifications.h"
 #include "SumatraPDF.h"
 #include "WindowInfo.h"
 #include "DisplayModel.h"
@@ -883,7 +879,7 @@ void CreateToc(WindowInfo* win) {
     l->SetFont(GetDefaultGuiFont(true, false));
     // label is set in UpdateToolbarSidebarText()
 
-    auto* treeCtrl = new TreeCtrl(win->hwndTocBox);
+    auto* treeCtrl = new TreeCtrl();
     treeCtrl->fullRowSelect = true;
     treeCtrl->dwExStyle = WS_EX_STATICEDGE;
     treeCtrl->onGetTooltip = TocCustomizeTooltip;
@@ -898,7 +894,7 @@ void CreateToc(WindowInfo* win) {
     HFONT fnt = GetTreeFont();
     treeCtrl->SetFont(fnt);
 
-    bool ok = treeCtrl->Create();
+    bool ok = treeCtrl->Create(win->hwndTocBox);
     CrashIf(!ok);
     win->tocTreeCtrl = treeCtrl;
     SubclassToc(win);

@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 /* A driver for various tests. The idea is that instead of having a separate
@@ -20,7 +20,8 @@
 #include "utils/WinUtil.h"
 #include "utils/ZipUtil.h"
 
-#include "wingui/TreeModel.h"
+#include "wingui/UIModels.h"
+
 #include "DisplayMode.h"
 #include "Controller.h"
 #include "EngineBase.h"

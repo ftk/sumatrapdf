@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 #include "utils/BaseUtil.h"
@@ -19,19 +19,18 @@
 #include "utils/GdiPlusUtil.h"
 #include "utils/Archive.h"
 
-#include "wingui/WinGui.h"
+#include "wingui/UIModels.h"
+
 #include "wingui/Layout.h"
 #include "wingui/Window.h"
-#include "wingui/StaticCtrl.h"
-#include "wingui/ButtonCtrl.h"
-#include "wingui/TreeModel.h"
 #include "wingui/TreeCtrl.h"
-#include "wingui/SplitterWnd.h"
 #include "wingui/LabelWithCloseWnd.h"
 #include "wingui/FrameRateWnd.h"
 #include "wingui/TooltipCtrl.h"
-#include "wingui/DropDownCtrl.h"
 #include "wingui/TabsCtrl.h"
+
+#include "wingui/wingui2.h"
+using namespace wg;
 
 #include "Annotation.h"
 #include "DisplayMode.h"
@@ -87,6 +86,7 @@
 #include "Version.h"
 #include "SumatraConfig.h"
 #include "EditAnnotations.h"
+#include "CommandPalette.h"
 
 #include "utils/Log.h"
 
@@ -330,8 +330,7 @@ void SwitchToDisplayMode(WindowInfo* win, DisplayMode displayMode, bool keepCont
     UpdateToolbarState(win);
 }
 
-// Find the first window showing a given PDF file
-WindowInfo* FindWindowInfoByFile(const WCHAR* file, bool focusTab) {
+TabInfo* FindTabByFile(const WCHAR* file) {
     AutoFreeWstr normFile(path::Normalize(file));
 
     for (WindowInfo* win : gWindows) {
@@ -340,13 +339,34 @@ WindowInfo* FindWindowInfoByFile(const WCHAR* file, bool focusTab) {
             if (!fp || !path::IsSame(tab->filePath, normFile)) {
                 continue;
             }
-            if (focusTab && tab != win->currentTab) {
-                TabsSelect(win, win->tabs.Find(tab));
-            }
-            return win;
+            return tab;
         }
     }
     return nullptr;
+}
+
+// ok for tab to be null
+void SelectTabInWindow(TabInfo* tab) {
+    if (!tab || !tab->win) {
+        return;
+    }
+    auto win = tab->win;
+    if (tab == win->currentTab) {
+        return;
+    }
+    TabsSelect(win, win->tabs.Find(tab));
+}
+
+// Find the first window showing a given PDF file
+WindowInfo* FindWindowInfoByFile(const WCHAR* file, bool focusTab) {
+    TabInfo* tab = FindTabByFile(file);
+    if (!tab) {
+        return nullptr;
+    }
+    if (focusTab) {
+        SelectTabInWindow(tab);
+    }
+    return tab->win;
 }
 
 // Find the first window that has been produced from <file>
@@ -741,7 +761,7 @@ void ControllerCallbackHandler::UpdateScrollbars(Size canvas) {
     CrashIf(!win->AsFixed());
     DisplayModel* dm = win->AsFixed();
 
-    SCROLLINFO si = {0};
+    SCROLLINFO si{};
     si.cbSize = sizeof(si);
     si.fMask = SIF_ALL;
 
@@ -1174,7 +1194,7 @@ static void LoadDocIntoCurrentTab(const LoadArgs& args, Controller* ctrl, FileSt
     if (unsupported) {
         unsupported.Set(str::Format(_TR("This document uses unsupported features (%s) and might not render properly"),
                                     unsupported.Get()));
-        win->ShowNotification(unsupported, NotificationOptions::Warning, NG_PERSISTENT_WARNING);
+        win->notifications->Show(win->hwndCanvas, unsupported, NotificationOptions::Warning, NG_PERSISTENT_WARNING);
     }
 
     // This should only happen after everything else is ready
@@ -1275,19 +1295,25 @@ void ReloadDocument(WindowInfo* win, bool autoRefresh) {
 }
 
 static void CreateSidebar(WindowInfo* win) {
-    win->sidebarSplitter = new SplitterCtrl(win->hwndFrame);
-    win->sidebarSplitter->type = SplitterType::Vert;
-    win->sidebarSplitter->onSplitterMove = OnSidebarSplitterMove;
-    bool ok = win->sidebarSplitter->Create();
-    CrashIf(!ok);
+    {
+        SplitterCreateArgs args;
+        args.parent = win->hwndFrame;
+        args.type = SplitterType::Vert;
+        win->sidebarSplitter = new Splitter();
+        win->sidebarSplitter->onSplitterMove = OnSidebarSplitterMove;
+        win->sidebarSplitter->Create(args);
+    }
 
     CreateToc(win);
 
-    win->favSplitter = new SplitterCtrl(win->hwndFrame);
-    win->favSplitter->type = SplitterType::Horiz;
-    win->favSplitter->onSplitterMove = OnFavSplitterMove;
-    ok = win->favSplitter->Create();
-    CrashIf(!ok);
+    {
+        SplitterCreateArgs args;
+        args.parent = win->hwndFrame;
+        args.type = SplitterType::Horiz;
+        win->favSplitter = new Splitter();
+        win->favSplitter->onSplitterMove = OnFavSplitterMove;
+        win->favSplitter->Create(args);
+    }
 
     CreateFavorites(win);
 
@@ -1366,8 +1392,8 @@ static WindowInfo* CreateWindowInfo() {
     ShowWindow(win->hwndCanvas, SW_SHOW);
     UpdateWindow(win->hwndCanvas);
 
-    win->infotip = new TooltipCtrl(win->hwndCanvas);
-    win->infotip->Create();
+    win->infotip = new TooltipCtrl();
+    win->infotip->Create(win->hwndCanvas);
 
     CreateCaption(win);
     CreateTabbar(win);
@@ -1559,7 +1585,7 @@ WindowInfo* LoadDocument(LoadArgs& args) {
     // there is a window the user has just been interacting with
     if (failEarly) {
         AutoFreeWstr msg(str::Format(_TR("File %s not found"), fullPath.Get()));
-        win->ShowNotification(msg, NotificationOptions::Highlight);
+        win->notifications->Show(win->hwndCanvas, msg, NotificationOptions::Highlight);
         // display the notification ASAP (prefs::Save() can introduce a notable delay)
         win->RedrawAll(true);
 
@@ -1616,7 +1642,7 @@ WindowInfo* LoadDocument(LoadArgs& args) {
         // TODO: same message as in Canvas.cpp to not introduce
         // new translation. Find a better message e.g. why failed.
         WCHAR* msg = str::Format(_TR("Error loading %s"), fullPath.Get());
-        win->ShowNotification(msg, NotificationOptions::Highlight);
+        win->notifications->Show(win->hwndCanvas, msg, NotificationOptions::Highlight);
         str::Free(msg);
         ShowWindow(win->hwndFrame, SW_SHOW);
 
@@ -1781,7 +1807,7 @@ static void UpdatePageInfoHelper(WindowInfo* win, NotificationWnd* wnd, int page
     }
     if (!wnd) {
         auto options = NotificationOptions::Persist;
-        win->ShowNotification(pageInfo, options, NG_PAGE_INFO_HELPER);
+        win->notifications->Show(win->hwndCanvas, pageInfo, options, NG_PAGE_INFO_HELPER);
     } else {
         wnd->UpdateMessage(pageInfo);
     }
@@ -1871,25 +1897,10 @@ void UpdateCursorPositionHelper(WindowInfo* win, Point pos, NotificationWnd* wnd
         posInfo.Set(str::Format(L"%s - %s %s", posInfo.Get(), _TR("Selection:"), selStr.Get()));
     }
     if (!wnd) {
-        win->ShowNotification(posInfo, NotificationOptions::Persist, NG_CURSOR_POS_HELPER);
+        win->notifications->Show(win->hwndCanvas, posInfo, NotificationOptions::Persist, NG_CURSOR_POS_HELPER);
     } else {
         wnd->UpdateMessage(posInfo);
     }
-}
-
-void AssociateExeWithPdfExtension() {
-    if (!HasPermission(Perm::RegistryAccess)) {
-        return;
-    }
-
-    DoAssociateExeWithPdfExtension(HKEY_CURRENT_USER);
-    DoAssociateExeWithPdfExtension(HKEY_LOCAL_MACHINE);
-
-    SHChangeNotify(SHCNE_ASSOCCHANGED, SHCNF_IDLIST | SHCNF_FLUSHNOWAIT, nullptr, nullptr);
-
-    // Remind the user, when a different application takes over
-    str::ReplaceWithCopy(&gGlobalPrefs->associatedExtensions, ".pdf");
-    gGlobalPrefs->associateSilently = false;
 }
 
 // re-render the document currently displayed in this window
@@ -2045,9 +2056,9 @@ static void CloseDocumentInCurrentTab(WindowInfo* win, bool keepUIEnabled, bool 
 }
 
 bool SaveAnnotationsToMaybeNewPdfFile(TabInfo* tab) {
-    WCHAR dstFileName[MAX_PATH + 1] = {0};
+    WCHAR dstFileName[MAX_PATH + 1]{};
 
-    OPENFILENAME ofn = {0};
+    OPENFILENAME ofn{};
     str::WStr fileFilter(256);
     fileFilter.Append(_TR("PDF documents"));
     fileFilter.Append(L"\1*.pdf\1");
@@ -2079,7 +2090,7 @@ bool SaveAnnotationsToMaybeNewPdfFile(TabInfo* tab) {
         str::Str msg;
         // TODO: duplicated string
         msg.AppendFmt(_TRA("Saving of '%s' failed with: '%s'"), dstFilePath.Get(), mupdfErr.data());
-        tab->win->ShowNotification(msg.AsView(), NotificationOptions::Warning);
+        tab->win->notifications->Show(tab->win->hwndCanvas, msg.AsView(), NotificationOptions::Warning);
     });
     if (!ok) {
         return false;
@@ -2100,7 +2111,7 @@ bool SaveAnnotationsToMaybeNewPdfFile(TabInfo* tab) {
 
     str::Str msg;
     msg.AppendFmt(_TRA("Saved annotations to '%s'"), dstFilePath.Get());
-    tab->win->ShowNotification(msg.AsView());
+    tab->win->notifications->Show(win->hwndCanvas, msg.AsView());
     return true;
 }
 
@@ -2151,7 +2162,7 @@ SaveChoice ShouldSaveAnnotationsDialog(HWND hwndParent, const WCHAR* filePath) {
     dialogConfig.pszMainIcon = TD_INFORMATION_ICON;
     dialogConfig.hwndParent = hwndParent;
 
-    int buttonPressedId{0};
+    int buttonPressedId = 0;
 
     auto hr = TaskDialogIndirect(&dialogConfig, &buttonPressedId, nullptr, nullptr);
     CrashIf(hr == E_INVALIDARG);
@@ -2215,7 +2226,7 @@ static bool MaybeSaveAnnotations(TabInfo* tab) {
                 str::Str msg;
                 // TODO: duplicated message
                 msg.AppendFmt(_TRA("Saving of '%s' failed with: '%s'"), path.Get(), mupdfErr.data());
-                tab->win->ShowNotification(msg.AsView(), NotificationOptions::Warning);
+                tab->win->notifications->Show(tab->win->hwndCanvas, msg.AsView(), NotificationOptions::Warning);
             });
         } break;
         case SaveChoice::Cancel:
@@ -2498,7 +2509,7 @@ static void OnMenuSaveAs(WindowInfo* win) {
         dstFileName[str::Len(dstFileName) - str::Len(defExt)] = '\0';
     }
 
-    OPENFILENAME ofn = {0};
+    OPENFILENAME ofn{};
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner = win->hwndFrame;
     ofn.lpstrFile = dstFileName;
@@ -2662,7 +2673,7 @@ static void OnMenuRenameFile(WindowInfo* win) {
 
     AutoFreeWstr initDir(path::GetDir(srcFileName));
 
-    OPENFILENAME ofn = {0};
+    OPENFILENAME ofn{};
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner = win->hwndFrame;
     ofn.lpstrFile = dstFileName;
@@ -2691,7 +2702,7 @@ static void OnMenuRenameFile(WindowInfo* win) {
         LoadArgs args(srcFileName, win);
         args.forceReuse = true;
         LoadDocument(args);
-        win->ShowNotification(_TR("Failed to rename the file!"), NotificationOptions::Warning);
+        win->notifications->Show(win->hwndCanvas, _TR("Failed to rename the file!"), NotificationOptions::Warning);
         return;
     }
 
@@ -2728,7 +2739,7 @@ static void OnMenuSaveBookmark(WindowInfo* win) {
     AutoFreeWstr fileFilter = str::Format(L"%s\1*.lnk\1", _TR("Bookmark Shortcuts"));
     str::TransCharsInPlace(fileFilter, L"\1", L"\0");
 
-    OPENFILENAME ofn = {0};
+    OPENFILENAME ofn{};
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner = win->hwndFrame;
     ofn.lpstrFile = dstFileName;
@@ -2839,7 +2850,7 @@ static bool BrowseForFolder(HWND hwnd, const WCHAR* initialFolder, const WCHAR* 
         return false;
     }
 
-    BROWSEINFO bi = {nullptr};
+    BROWSEINFOW bi{};
     bi.hwndOwner = hwnd;
     bi.ulFlags = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE;
     bi.lpszTitle = caption;
@@ -2865,7 +2876,7 @@ static bool BrowseForFolder(HWND hwnd, const WCHAR* initialFolder, const WCHAR* 
 
 static void OnMenuOpenFolder(WindowInfo* win) {
     HWND hwnd = win->hwndFrame;
-    WCHAR dirW[MAX_PATH + 2] = {0};
+    WCHAR dirW[MAX_PATH + 2]{};
     bool ok = BrowseForFolder(hwnd, nullptr, L"Select folder with PDF files", dirW, dimof(dirW));
     if (!ok) {
         return;
@@ -2935,7 +2946,7 @@ static void OnMenuOpen(WindowInfo* win) {
     fileFilter.Append(L"\1*.*\1");
     str::TransCharsInPlace(fileFilter.Get(), L"\1", L"\0");
 
-    OPENFILENAME ofn = {0};
+    OPENFILENAME ofn{};
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner = win->hwndFrame;
 
@@ -3496,7 +3507,7 @@ void ExitFullScreen(WindowInfo* win) {
     }
 }
 
-void OnMenuViewFullscreen(WindowInfo* win, bool presentation) {
+void ToggleFullScreen(WindowInfo* win, bool presentation) {
     bool enterFullScreen = presentation ? !win->presentation : !win->isFullScreen;
 
     if (win->presentation || win->isFullScreen) {
@@ -3510,9 +3521,9 @@ void OnMenuViewFullscreen(WindowInfo* win, bool presentation) {
     }
 }
 
-static void OnMenuViewPresentation(WindowInfo* win) {
+static void TogglePresentationMode(WindowInfo* win) {
     // only DisplayModel currently supports an actual presentation mode
-    OnMenuViewFullscreen(win, win->AsFixed() != nullptr);
+    ToggleFullScreen(win, win->AsFixed() != nullptr);
 }
 
 // make sure that idx falls within <0, max-1> inclusive range
@@ -3588,7 +3599,26 @@ static bool ChmForwardKey(WPARAM key) {
     return false;
 }
 
-bool FrameOnKeydown(WindowInfo* win, WPARAM key, LPARAM lp, bool inTextfield) {
+static void DeleteAnnotationUnderCursor(WindowInfo* win) {
+    Point pt{0, 0};
+    bool ok = GetCursorPosInHwnd(win->hwndCanvas, pt);
+    DisplayModel* dm = win->AsFixed();
+    Annotation* annot = nullptr;
+    if (ok && dm) {
+        int pageNoUnderCursor = dm->GetPageNoByPoint(pt);
+        if (pageNoUnderCursor > 0) {
+            annot = dm->GetAnnotationAtPos(pt, nullptr);
+        }
+    }
+    if (annot) {
+        auto tab = win->currentTab;
+        DeleteAnnotationAndUpdateUI(tab, tab->editAnnotsWindow, annot);
+        delete annot;
+    }
+}
+
+static bool FrameOnKeydown(WindowInfo* win, WPARAM key, LPARAM lp) {
+    // TODO: how does this interact with new accelerators?
     if (PM_BLACK_SCREEN == win->presentation || PM_WHITE_SCREEN == win->presentation) {
         // black/white screen is disabled on any unmodified key press in FrameOnChar
         return true;
@@ -3596,27 +3626,6 @@ bool FrameOnKeydown(WindowInfo* win, WPARAM key, LPARAM lp, bool inTextfield) {
 
     if (VK_ESCAPE == key) {
         CancelDrag(win);
-        return true;
-    }
-
-    if (VK_DELETE == key || VK_BACK == key) {
-        logf("del or back pressed\n");
-        Point pt{0, 0};
-        bool ok = GetCursorPosInHwnd(win->hwndCanvas, pt);
-        DisplayModel* dm = win->AsFixed();
-        Annotation* annot = nullptr;
-        if (ok && dm) {
-            int pageNoUnderCursor = dm->GetPageNoByPoint(pt);
-            if (pageNoUnderCursor > 0) {
-                annot = dm->GetAnnotationAtPos(pt, nullptr);
-            }
-        }
-        if (annot) {
-            auto tab = win->currentTab;
-            DeleteAnnotationAndUpdateUI(tab, tab->editAnnotsWindow, annot);
-            delete annot;
-        }
-
         return true;
     }
 
@@ -3628,54 +3637,27 @@ bool FrameOnKeydown(WindowInfo* win, WPARAM key, LPARAM lp, bool inTextfield) {
         return true;
     }
 
-    if ((VK_LEFT == key || VK_RIGHT == key) && isShift && isCtrl && !win->IsAboutWindow() && !inTextfield) {
-        // folder browsing should also work when an error page is displayed,
-        // so special-case it before the win->IsDocLoaded() check
-        BrowseFolder(win, VK_RIGHT == key);
-        return true;
-    }
-
     if (!win->IsDocLoaded()) {
         return false;
     }
 
     DisplayModel* dm = win->AsFixed();
+
     // some of the chm key bindings are different than the rest and we
     // need to make sure we don't break them
     bool isChm = win->AsChm();
-
+    // TODO: not sure how this interacts with accelerators
+#if 0
     bool isPageUp = (isCtrl && (VK_UP == key));
     if (!isChm) {
         isPageUp |= (VK_PRIOR == key) && !isCtrl;
-    }
-
-    if (isPageUp) {
-        int currentPos = GetScrollPos(win->hwndCanvas, SB_VERT);
-        if (win->ctrl->GetZoomVirtual() != ZOOM_FIT_CONTENT) {
-            SendMessageW(win->hwndCanvas, WM_VSCROLL, SB_PAGEUP, 0);
-        }
-        if (GetScrollPos(win->hwndCanvas, SB_VERT) == currentPos) {
-            win->ctrl->GoToPrevPage(true);
-        }
-        return true;
     }
 
     bool isPageDown = (isCtrl && (VK_DOWN == key));
     if (!isChm) {
         isPageDown |= (VK_NEXT == key) && !isCtrl;
     }
-
-    if (isPageDown) {
-        int currentPos = GetScrollPos(win->hwndCanvas, SB_VERT);
-        if (win->ctrl->GetZoomVirtual() != ZOOM_FIT_CONTENT) {
-            SendMessageW(win->hwndCanvas, WM_VSCROLL, SB_PAGEDOWN, 0);
-        }
-        if (GetScrollPos(win->hwndCanvas, SB_VERT) == currentPos) {
-            win->ctrl->GoToNextPage();
-        }
-        return true;
-    }
-
+#endif
     if (isChm) {
         if (ChmForwardKey(key)) {
             win->AsChm()->PassUIMsg(WM_KEYDOWN, key, lp);
@@ -3684,52 +3666,43 @@ bool FrameOnKeydown(WindowInfo* win, WPARAM key, LPARAM lp, bool inTextfield) {
     }
     // lf("key=%d,%c,shift=%d\n", key, (char)key, (int)WasKeyDown(VK_SHIFT));
 
+    // the parts that are commented out should now be handled
+    // in OnCommand via accelerators
     if (VK_UP == key) {
-        if (dm && dm->NeedVScroll()) {
-            SendMessageW(win->hwndCanvas, WM_VSCROLL, isShift ? SB_HPAGEUP : SB_LINEUP, 0);
-        } else {
-            win->ctrl->GoToPrevPage(true);
-        }
+        logf("VK_UP\n");
     } else if (VK_DOWN == key) {
-        if (dm && dm->NeedVScroll()) {
-            SendMessageW(win->hwndCanvas, WM_VSCROLL, isShift ? SB_HPAGEDOWN : SB_LINEDOWN, 0);
-        } else {
-            win->ctrl->GoToNextPage();
-        }
+        logf("VK_DOWN\n");
     } else if (VK_PRIOR == key && isCtrl) {
-        win->ctrl->GoToPrevPage();
+        // win->ctrl->GoToPrevPage();
+        logf("CTRL + VK_PRIOR\n");
     } else if (VK_NEXT == key && isCtrl) {
-        win->ctrl->GoToNextPage();
+        // win->ctrl->GoToNextPage();
+        logf("CTRL + VK_NEXTds\n");
     } else if (VK_HOME == key && isCtrl) {
-        win->ctrl->GoToFirstPage();
+        logf("CTRL + VK_HOME\n");
+        // win->ctrl->GoToFirstPage();
     } else if (VK_END == key && isCtrl) {
+        logf("CTRL + VK_END\n");
         if (!win->ctrl->GoToLastPage()) {
-            SendMessageW(win->hwndCanvas, WM_VSCROLL, SB_BOTTOM, 0);
+            //    SendMessageW(win->hwndCanvas, WM_VSCROLL, SB_BOTTOM, 0);
         }
-    } else if (inTextfield) {
-        // The remaining keys have a different meaning
-        return false;
     } else if (VK_LEFT == key) {
-        if (dm && dm->NeedHScroll() && !isCtrl) {
-            SendMessageW(win->hwndCanvas, WM_HSCROLL, isShift ? SB_PAGELEFT : SB_LINELEFT, 0);
-        } else {
-            win->ctrl->GoToPrevPage();
-        }
+        logf("VK_LEFT\n");
     } else if (VK_RIGHT == key) {
-        if (dm && dm->NeedHScroll() && !isCtrl) {
-            SendMessageW(win->hwndCanvas, WM_HSCROLL, isShift ? SB_PAGERIGHT : SB_LINERIGHT, 0);
-        } else {
-            win->ctrl->GoToNextPage();
-        }
+        logf("VK_RIGHT\n");
     } else if (VK_HOME == key) {
-        win->ctrl->GoToFirstPage();
+        logf("VK_HOME\n");
+        // win->ctrl->GoToFirstPage();
     } else if (VK_END == key) {
+        logf("VK_END\n");
         if (!win->ctrl->GoToLastPage()) {
-            SendMessageW(win->hwndCanvas, WM_VSCROLL, SB_BOTTOM, 0);
+            // SendMessageW(win->hwndCanvas, WM_VSCROLL, SB_BOTTOM, 0);
         }
     } else if (VK_MULTIPLY == key && dm) {
+        logf("VK_MULTIPLY\n");
         dm->RotateBy(90);
     } else if (VK_DIVIDE == key && dm) {
+        logf("VK_DIVIDE\n");
         dm->RotateBy(-90);
         gIsDivideKeyDown = true;
     } else {
@@ -3771,7 +3744,7 @@ static void OnFrameKeyEsc(WindowInfo* win) {
         return;
     }
     if (win->presentation || win->isFullScreen) {
-        OnMenuViewFullscreen(win, win->presentation != PM_DISABLED);
+        ToggleFullScreen(win, win->presentation != PM_DISABLED);
         return;
     }
 }
@@ -3886,6 +3859,25 @@ static void ShowCursorPositionInDoc(WindowInfo* win) {
     }
 }
 
+static void openAnnotsInEditWindow(WindowInfo* win, Vec<Annotation*>& annots, bool isShift) {
+    if (annots.empty()) {
+        return;
+    }
+    WindowInfoRerender(win);
+    if (isShift) {
+        StartEditAnnotations(win->currentTab, annots);
+        return;
+    }
+    auto w = win->currentTab->editAnnotsWindow;
+    if (w) {
+        for (auto annot : annots) {
+            AddAnnotationToEditWindow(w, annot);
+        }
+    } else {
+        DeleteVecMembers(annots);
+    }
+};
+
 static void FrameOnChar(WindowInfo* win, WPARAM key, LPARAM info = 0) {
     if (PM_BLACK_SCREEN == win->presentation || PM_WHITE_SCREEN == win->presentation) {
         win->ChangePresentationMode(PM_ENABLED);
@@ -3912,14 +3904,6 @@ static void FrameOnChar(WindowInfo* win, WPARAM key, LPARAM info = 0) {
         case VK_ESCAPE:
             OnFrameKeyEsc(win);
             return;
-        case 'q':
-            // close the current document (it's too easy to press for discarding multiple tabs)
-            // quit if this is the last window
-            CloseCurrentTab(win, true);
-            return;
-        case 'r':
-            ReloadDocument(win, false);
-            return;
         case VK_TAB:
             AdvanceFocus(win);
             break;
@@ -3931,77 +3915,8 @@ static void FrameOnChar(WindowInfo* win, WPARAM key, LPARAM info = 0) {
 
     auto* ctrl = win->ctrl;
     DisplayModel* dm = win->AsFixed();
-    auto currentTab = win->currentTab;
-
-    auto openAnnotsInEditWindow = [&win](Vec<Annotation*>& annots, bool isShift) -> void {
-        if (annots.empty()) {
-            return;
-        }
-        WindowInfoRerender(win);
-        if (isShift) {
-            StartEditAnnotations(win->currentTab, annots);
-            return;
-        }
-        auto w = win->currentTab->editAnnotsWindow;
-        if (w) {
-            for (auto annot : annots) {
-                AddAnnotationToEditWindow(w, annot);
-            }
-        } else {
-            DeleteVecMembers(annots);
-        }
-    };
 
     switch (key) {
-        case VK_SPACE:
-        case VK_RETURN:
-            FrameOnKeydown(win, isShift ? VK_PRIOR : VK_NEXT, 0);
-            break;
-        case VK_BACK: {
-            bool forward = isShift;
-            ctrl->Navigate(forward ? 1 : -1);
-        } break;
-        case 'g':
-            OnMenuGoToPage(win);
-            break;
-        case 'h':
-            FrameOnKeydown(win, VK_LEFT, 0);
-            break;
-        case 'j':
-            FrameOnKeydown(win, VK_DOWN, 0);
-            break;
-        case 'k':
-            FrameOnKeydown(win, VK_UP, 0);
-            break;
-        case 'l':
-            FrameOnKeydown(win, VK_RIGHT, 0);
-            break;
-        case 'n':
-            ctrl->GoToNextPage();
-            break;
-        case 'p':
-            ctrl->GoToPrevPage();
-            break;
-        case 'z':
-            win->ToggleZoom();
-            break;
-        case '[':
-            if (dm) {
-                dm->RotateBy(-90);
-            }
-            break;
-        case ']':
-            if (dm) {
-                dm->RotateBy(90);
-            }
-            break;
-        case 'f':
-            if (win->isFullScreen || win->presentation) {
-                ExitFullScreen(win);
-            } else {
-                EnterFullScreen(win);
-            }
-            break;
         // per https://en.wikipedia.org/wiki/Keyboard_layout
         // almost all keyboard layouts allow to press either
         // '+' or '=' unshifted (and one of them is also often
@@ -4024,48 +3939,9 @@ static void FrameOnChar(WindowInfo* win, WPARAM key, LPARAM info = 0) {
             }
             gIsDivideKeyDown = false;
             break;
-        case 'c':
-            OnMenuViewContinuous(win);
-            break;
         case 'b':
             OnFrameKeyB(win);
             break;
-        case '.':
-            // for Logitech's wireless presenters which target PowerPoint's shortcuts
-            if (win->presentation) {
-                win->ChangePresentationMode(PM_BLACK_SCREEN);
-            }
-            break;
-        case 'w':
-            if (win->presentation) {
-                win->ChangePresentationMode(PM_WHITE_SCREEN);
-            }
-            break;
-        case 'i':
-            // experimental "page info" tip: make figuring out current page and
-            // total pages count a one-key action (unless they're already visible)
-            if (isShift) {
-                gGlobalPrefs->fixedPageUI.invertColors ^= true;
-                UpdateDocumentColors();
-                UpdateTreeCtrlColors(win);
-                // UpdateUiForCurrentTab(win);
-            } else {
-                if (dm) {
-                    TogglePageInfoHelper(win);
-                }
-            }
-            break;
-        case 'm':
-            ShowCursorPositionInDoc(win);
-            break;
-        case 'u': {
-            auto annots = MakeAnnotationFromSelection(currentTab, AnnotationType::Underline);
-            openAnnotsInEditWindow(annots, isShift);
-        } break;
-        case 'a': {
-            auto annots = MakeAnnotationFromSelection(currentTab, AnnotationType::Highlight);
-            openAnnotsInEditWindow(annots, isShift);
-        } break;
     }
 }
 
@@ -4084,7 +3960,7 @@ static bool FrameOnSysChar(WindowInfo* win, WPARAM key) {
 }
 
 static void OnSidebarSplitterMove(SplitterMoveEvent* ev) {
-    SplitterCtrl* splitter = ev->w;
+    Splitter* splitter = ev->w;
     HWND hwnd = splitter->hwnd;
     WindowInfo* win = FindWindowInfoByHwnd(hwnd);
 
@@ -4108,7 +3984,7 @@ static void OnSidebarSplitterMove(SplitterMoveEvent* ev) {
 }
 
 static void OnFavSplitterMove(SplitterMoveEvent* ev) {
-    SplitterCtrl* splitter = ev->w;
+    Splitter* splitter = ev->w;
     HWND hwnd = splitter->hwnd;
     WindowInfo* win = FindWindowInfoByHwnd(hwnd);
 
@@ -4240,14 +4116,14 @@ static void SaveAnnotationsAndCloseEditAnnowtationsWindow(TabInfo* tab) {
         str::Str msg;
         // TODO: duplicated message
         msg.AppendFmt(_TRA("Saving of '%s' failed with: '%s'"), path.Get(), mupdfErr.data());
-        tab->win->ShowNotification(msg.AsView(), NotificationOptions::Warning);
+        tab->win->notifications->Show(tab->win->hwndCanvas, msg.AsView(), NotificationOptions::Warning);
     });
     if (!ok) {
         return;
     }
     str::Str msg;
     msg.AppendFmt(_TRA("Saved annotations to '%s'"), path.Get());
-    tab->win->ShowNotification(msg.AsView());
+    tab->win->notifications->Show(tab->win->hwndCanvas, msg.AsView());
 
     CloseAndDeleteEditAnnotationsWindow(tab->editAnnotsWindow);
     tab->editAnnotsWindow = nullptr;
@@ -4261,7 +4137,7 @@ static bool NeedsURLEncoding(WCHAR c) {
 #endif
 
 static str::WStr URLEncode(const WCHAR* s) {
-    WCHAR buf[INTERNET_MAX_URL_LENGTH]{0};
+    WCHAR buf[INTERNET_MAX_URL_LENGTH]{};
     DWORD cchSizeInOut = dimof(buf) - 1;
     DWORD flags = URL_ESCAPE_AS_UTF8;
     UrlEscapeW(s, buf, &cchSizeInOut, flags);
@@ -4351,7 +4227,7 @@ static void CopySelectionInTabToClipboard(TabInfo* tab) {
     }
     // TODO: can this be reached?
     if (tab->AsFixed()) {
-        tab->win->ShowNotification(_TR("Select content with Ctrl+left mouse button"));
+        tab->win->notifications->Show(tab->win->hwndCanvas, _TR("Select content with Ctrl+left mouse button"));
     }
 }
 
@@ -4444,6 +4320,26 @@ static LRESULT FrameOnCommand(WindowInfo* win, HWND hwnd, UINT msg, WPARAM wp, L
     }
 
     auto* ctrl = win->ctrl;
+    DisplayModel* dm = win->AsFixed();
+
+    Vec<Annotation*> createdAnnots;
+
+    AnnotationType annotType = (AnnotationType)(wmId - CmdCreateAnnotText);
+    switch (wmId) {
+        case CmdCreateAnnotHighlight:
+            annotType = AnnotationType::Highlight;
+            break;
+        case CmdCreateAnnotSquiggly:
+            annotType = AnnotationType::Squiggly;
+            break;
+        case CmdCreateAnnotStrikeOut:
+            annotType = AnnotationType::StrikeOut;
+            break;
+        case CmdCreateAnnotUnderline:
+            annotType = AnnotationType::Underline;
+            break;
+    }
+
     // most of them require a win, the few exceptions are no-ops
     switch (wmId) {
         case CmdNewWindow:
@@ -4454,7 +4350,7 @@ static LRESULT FrameOnCommand(WindowInfo* win, HWND hwnd, UINT msg, WPARAM wp, L
             OnDuplicateInNewWindow(win);
             break;
 
-        case CmdOpen:
+        case CmdOpenFile:
             OnMenuOpen(win);
             break;
 
@@ -4462,20 +4358,34 @@ static LRESULT FrameOnCommand(WindowInfo* win, HWND hwnd, UINT msg, WPARAM wp, L
             OnMenuOpenFolder(win);
             break;
 
-        case CmdSaveAs:
-            OnMenuSaveAs(win);
+        case CmdShowInFolder:
+            OnMenuShowInFolder(win);
+            break;
+
+        case CmdOpenPrevFileInFolder:
+        case CmdOpenNextFileInFolder:
+            if (!win->IsAboutWindow()) {
+                // folder browsing should also work when an error page is displayed,
+                // so special-case it before the win->IsDocLoaded() check
+                bool forward = wmId == CmdOpenNextFileInFolder;
+                BrowseFolder(win, forward);
+            }
             break;
 
         case CmdRenameFile:
             OnMenuRenameFile(win);
             break;
 
-        case CmdShowInFolder:
-            OnMenuShowInFolder(win);
+        case CmdSaveAs:
+            OnMenuSaveAs(win);
             break;
 
         case CmdPrint:
             OnMenuPrint(win);
+            break;
+
+        case CmdCommandPalette:
+            RunCommandPallette(win);
             break;
 
         case CmdClose:
@@ -4486,7 +4396,7 @@ static LRESULT FrameOnCommand(WindowInfo* win, HWND hwnd, UINT msg, WPARAM wp, L
             OnMenuExit();
             break;
 
-        case CmdRefresh:
+        case CmdReloadDocument:
             ReloadDocument(win, false);
             break;
 
@@ -4560,11 +4470,11 @@ static LRESULT FrameOnCommand(WindowInfo* win, HWND hwnd, UINT msg, WPARAM wp, L
             OnMenuViewMangaMode(win);
             break;
 
-        case CmdViewShowHideToolbar:
+        case CmdToggleToolbar:
             OnMenuViewShowHideToolbar();
             break;
 
-        case CmdViewShowHideScrollbars:
+        case CmdToggleScrollbars:
             OnMenuViewShowHideScrollbars();
             break;
 
@@ -4576,7 +4486,7 @@ static LRESULT FrameOnCommand(WindowInfo* win, HWND hwnd, UINT msg, WPARAM wp, L
             StartEditAnnotations(tab, nullptr);
             break;
 
-        case CmdViewShowHideMenuBar:
+        case CmdToggleMenuBar:
             if (!win->tabsInTitlebar) {
                 ShowHideMenuBar(win);
             }
@@ -4590,27 +4500,113 @@ static LRESULT FrameOnCommand(WindowInfo* win, HWND hwnd, UINT msg, WPARAM wp, L
             ToggleTocBox(win);
             break;
 
-        case CmdGoToNextPage:
-            if (win->IsDocLoaded()) {
-                ctrl->GoToNextPage();
+        // TODO: rename CmdScrolUpLineOrPrevPage
+        case CmdScrollUp: {
+            if (dm && dm->NeedVScroll()) {
+                SendMessageW(win->hwndCanvas, WM_VSCROLL, SB_LINEUP, 0);
+            } else {
+                // in single page view, scrolls by page
+                win->ctrl->GoToPrevPage(true);
             }
-            break;
+        } break;
+
+        case CmdScrollUpHalfPage: {
+            if (dm && dm->NeedVScroll()) {
+                SendMessageW(win->hwndCanvas, WM_VSCROLL, SB_HALF_PAGEUP, 0);
+            } else {
+                // in single page view, scrolls by page
+                win->ctrl->GoToNextPage();
+            }
+        } break;
+
+        // TODO: do I need both CmdScrollUpPage and CmdGoToPrevPage
+        case CmdScrollUpPage: {
+            int currentPos = GetScrollPos(win->hwndCanvas, SB_VERT);
+            if (win->ctrl->GetZoomVirtual() != ZOOM_FIT_CONTENT) {
+                SendMessageW(win->hwndCanvas, WM_VSCROLL, SB_PAGEUP, 0);
+            }
+            if (GetScrollPos(win->hwndCanvas, SB_VERT) == currentPos) {
+                win->ctrl->GoToPrevPage(true);
+            }
+        } break;
 
         case CmdGoToPrevPage:
-            if (win->IsDocLoaded()) {
+            if (ctrl && win->IsDocLoaded()) {
                 ctrl->GoToPrevPage();
             }
             break;
 
+        // TODO: rename CmdScrolDownOrNextPage
+        case CmdScrollDown: {
+            if (dm && dm->NeedVScroll()) {
+                SendMessageW(win->hwndCanvas, WM_VSCROLL, SB_LINEDOWN, 0);
+            } else {
+                // in single page view, scrolls by page
+                win->ctrl->GoToNextPage();
+            }
+        } break;
+
+        case CmdScrollDownHalfPage: {
+            if (dm && dm->NeedVScroll()) {
+                SendMessageW(win->hwndCanvas, WM_VSCROLL, SB_HALF_PAGEDOWN, 0);
+            } else {
+                // in single page view, scrolls by page
+                win->ctrl->GoToNextPage();
+            }
+        } break;
+
+        case CmdScrollDownPage: {
+            int currentPos = GetScrollPos(win->hwndCanvas, SB_VERT);
+            if (win->ctrl->GetZoomVirtual() != ZOOM_FIT_CONTENT) {
+                SendMessageW(win->hwndCanvas, WM_VSCROLL, SB_PAGEDOWN, 0);
+            }
+            if (GetScrollPos(win->hwndCanvas, SB_VERT) == currentPos) {
+                win->ctrl->GoToNextPage();
+            }
+        } break;
+
+        case CmdGoToNextPage:
+            if (ctrl && win->IsDocLoaded()) {
+                ctrl->GoToNextPage();
+            }
+            break;
+
+        // TODO: rename CmdScrollLeftOrPrevPage
+        case CmdScrollLeft: {
+            if (dm && dm->NeedHScroll()) {
+                SendMessageW(win->hwndCanvas, WM_HSCROLL, SB_LINELEFT, 0);
+            } else {
+                win->ctrl->GoToPrevPage();
+            }
+        } break;
+
+        case CmdScrollLeftPage: {
+            SendMessageW(win->hwndCanvas, WM_HSCROLL, SB_PAGELEFT, 0);
+        } break;
+
+        case CmdScrollRight: {
+            if (dm && dm->NeedHScroll()) {
+                SendMessageW(win->hwndCanvas, WM_HSCROLL, SB_LINERIGHT, 0);
+            } else {
+                win->ctrl->GoToNextPage();
+            }
+        } break;
+
+        case CmdScrollRightPage: {
+            SendMessageW(win->hwndCanvas, WM_HSCROLL, SB_PAGERIGHT, 0);
+        } break;
+
         case CmdGoToFirstPage:
-            if (win->IsDocLoaded()) {
+            if (ctrl && win->IsDocLoaded()) {
                 ctrl->GoToFirstPage();
             }
             break;
 
         case CmdGoToLastPage:
-            if (win->IsDocLoaded()) {
-                ctrl->GoToLastPage();
+            if (ctrl && win->IsDocLoaded()) {
+                if (!ctrl->GoToLastPage()) {
+                    SendMessageW(win->hwndCanvas, WM_VSCROLL, SB_BOTTOM, 0);
+                }
             }
             break;
 
@@ -4618,12 +4614,12 @@ static LRESULT FrameOnCommand(WindowInfo* win, HWND hwnd, UINT msg, WPARAM wp, L
             OnMenuGoToPage(win);
             break;
 
-        case CmdViewPresentationMode:
-            OnMenuViewPresentation(win);
+        case CmdTogglePresentationMode:
+            TogglePresentationMode(win);
             break;
 
-        case CmdViewFullScreen:
-            OnMenuViewFullscreen(win);
+        case CmdToggleFullscreen:
+            ToggleFullScreen(win);
             break;
 
         case CmdViewRotateLeft:
@@ -4675,7 +4671,7 @@ static LRESULT FrameOnCommand(WindowInfo* win, HWND hwnd, UINT msg, WPARAM wp, L
             break;
 
         case CmdHelpAbout:
-            OnMenuAbout();
+            OnMenuAbout(win);
             break;
 
         case CmdCheckUpdate:
@@ -4695,7 +4691,7 @@ static LRESULT FrameOnCommand(WindowInfo* win, HWND hwnd, UINT msg, WPARAM wp, L
             break;
 
         case CmdProperties:
-            OnMenuProperties(win);
+            ShowPropertiesWindow(win);
             break;
 
         case CmdMoveFrameFocus:
@@ -4703,18 +4699,6 @@ static LRESULT FrameOnCommand(WindowInfo* win, HWND hwnd, UINT msg, WPARAM wp, L
                 SetFocus(win->hwndFrame);
             } else if (win->tocVisible) {
                 SetFocus(win->tocTreeCtrl->hwnd);
-            }
-            break;
-
-        case CmdGoToNavBack:
-            if (win->IsDocLoaded()) {
-                ctrl->Navigate(-1);
-            }
-            break;
-
-        case CmdGoToNavForward:
-            if (win->IsDocLoaded()) {
-                ctrl->Navigate(1);
             }
             break;
 
@@ -4757,6 +4741,20 @@ static LRESULT FrameOnCommand(WindowInfo* win, HWND hwnd, UINT msg, WPARAM wp, L
             FrameOnChar(win, 'h');
             break;
 
+        // TODO: make it closer to handling in OnWindowContextMenu()
+        case CmdCreateAnnotHighlight:
+        case CmdCreateAnnotSquiggly:
+        case CmdCreateAnnotStrikeOut:
+        case CmdCreateAnnotUnderline: {
+            auto annots = MakeAnnotationFromSelection(tab, annotType);
+            bool isShift = IsShiftPressed();
+            openAnnotsInEditWindow(win, annots, isShift);
+        } break;
+
+        case CmdDeleteAnnotation: {
+            DeleteAnnotationUnderCursor(win);
+        } break;
+
 #if defined(DEBUG)
         case CmdDebugTestApp:
             extern void TestApp(HINSTANCE hInstance);
@@ -4765,9 +4763,9 @@ static LRESULT FrameOnCommand(WindowInfo* win, HWND hwnd, UINT msg, WPARAM wp, L
 #endif
 
         case CmdDebugShowNotif: {
-            win->ShowNotification(L"This is a notification", NotificationOptions::Warning);
+            win->notifications->Show(win->hwndCanvas, L"This is a notification", NotificationOptions::Warning);
             // TODO: this notification covers previous
-            // win->ShowNotification(L"This is a second notification\nMy friend.");
+            // win->notifications->Show(win->hwndCanvas, L"This is a second notification\nMy friend.");
         } break;
 
         case CmdDebugCrashMe:
@@ -4788,10 +4786,106 @@ static LRESULT FrameOnCommand(WindowInfo* win, HWND hwnd, UINT msg, WPARAM wp, L
             ToggleFavorites(win);
             break;
 
+        case CmdTogglePageInfo:
+            if (dm) {
+                // "page info" tip: make figuring out current page and
+                // total pages count a one-key action (unless they're already visible)
+                TogglePageInfoHelper(win);
+            }
+            break;
+
+        case CmdInvertColors:
+            gGlobalPrefs->fixedPageUI.invertColors ^= true;
+            UpdateDocumentColors();
+            UpdateTreeCtrlColors(win);
+            // UpdateUiForCurrentTab(win);
+            break;
+
+        case CmdRotateLeft:
+            if (dm) {
+                dm->RotateBy(-90);
+            }
+            break;
+
+        case CmdRotateRight:
+            if (dm) {
+                dm->RotateBy(90);
+            }
+            break;
+
+        case CmdNavigateBack:
+            if (ctrl) {
+                ctrl->Navigate(-1);
+            }
+            break;
+
+        case CmdNavigateForward:
+            if (ctrl) {
+                ctrl->Navigate(1);
+            }
+            break;
+
+        case CmdToggleZoom:
+            win->ToggleZoom();
+            break;
+
+        case CmdShowCursorPosition:
+            ShowCursorPositionInDoc(win);
+            break;
+
+        case CmdPresentationBlackBackground:
+            if (win->presentation) {
+                win->ChangePresentationMode(PM_BLACK_SCREEN);
+            }
+            break;
+        case CmdPresentationWhiteBackground:
+            if (win->presentation) {
+                win->ChangePresentationMode(PM_WHITE_SCREEN);
+            }
+            break;
+
+        case CmdCloseCurrentDocument:
+            // close the current document (it's too easy to press for discarding multiple tabs)
+            // quit if this is the last window
+            CloseCurrentTab(win, true);
+            break;
+
+        // Note: duplicated in OnWindowContextMenu because slightly different handling
+        case CmdCreateAnnotText:
+        case CmdCreateAnnotFreeText:
+        case CmdCreateAnnotStamp:
+        case CmdCreateAnnotCaret:
+        case CmdCreateAnnotSquare:
+        case CmdCreateAnnotLine:
+        case CmdCreateAnnotCircle: {
+            EngineBase* engine = dm ? dm->GetEngine() : nullptr;
+            bool handle = !win->isFullScreen && EngineSupportsAnnotations(engine);
+            if (!handle) {
+                return 0;
+            }
+            POINT pt = GetCursorPosInHwnd(hwnd);
+            int x = pt.x;
+            int y = pt.y;
+            int pageNoUnderCursor = dm->GetPageNoByPoint(Point{x, y});
+            if (pageNoUnderCursor < 0) {
+                return 0;
+            }
+            PointF ptOnPage = dm->CvtFromScreen(Point{x, y}, pageNoUnderCursor);
+            MapWindowPoints(win->hwndCanvas, HWND_DESKTOP, &pt, 1);
+            auto annot = EngineMupdfCreateAnnotation(engine, annotType, pageNoUnderCursor, ptOnPage);
+            if (annot) {
+                WindowInfoRerender(win);
+                ToolbarUpdateStateForWindow(win, true);
+                createdAnnots.Append(annot);
+            }
+        } break;
+
         default:
             return DefWindowProc(hwnd, msg, wp, lp);
     }
-
+    if (!createdAnnots.empty()) {
+        StartEditAnnotations(tab, createdAnnots);
+    }
     return 0;
 }
 
@@ -4801,6 +4895,8 @@ static LRESULT OnFrameGetMinMaxInfo(MINMAXINFO* info) {
     info->ptMinTrackSize.y = MIN_WIN_DY;
     return 0;
 }
+
+HWND gLastActiveFrameHwnd = nullptr;
 
 LRESULT CALLBACK WndProcSumatraFrame(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     WindowInfo* win = FindWindowInfoByHwnd(hwnd);
@@ -4865,19 +4961,25 @@ LRESULT CALLBACK WndProcSumatraFrame(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) 
             }
             break;
 
+        case WM_ACTIVATE:
+            if (wp != WA_INACTIVE) {
+                gLastActiveFrameHwnd = hwnd;
+            }
+            break;
+
         case WM_APPCOMMAND:
             // both keyboard and mouse drivers should produce WM_APPCOMMAND
             // messages for their special keys, so handle these here and return
             // TRUE so as to not make them bubble up further
             switch (GET_APPCOMMAND_LPARAM(lp)) {
                 case APPCOMMAND_BROWSER_BACKWARD:
-                    HwndSendCommand(hwnd, CmdGoToNavBack);
+                    HwndSendCommand(hwnd, CmdNavigateBack);
                     return TRUE;
                 case APPCOMMAND_BROWSER_FORWARD:
-                    HwndSendCommand(hwnd, CmdGoToNavForward);
+                    HwndSendCommand(hwnd, CmdNavigateForward);
                     return TRUE;
                 case APPCOMMAND_BROWSER_REFRESH:
-                    HwndSendCommand(hwnd, CmdRefresh);
+                    HwndSendCommand(hwnd, CmdReloadDocument);
                     return TRUE;
                 case APPCOMMAND_BROWSER_SEARCH:
                     HwndSendCommand(hwnd, CmdFindFirst);

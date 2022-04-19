@@ -1,11 +1,10 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 #include "utils/BaseUtil.h"
 #include "utils/ScopedWin.h"
 #include "utils/WinUtil.h"
 
-#include "wingui/WinGui.h"
 #include "wingui/Layout.h"
 #include "wingui/Window.h"
 #include "wingui/TooltipCtrl.h"
@@ -16,7 +15,7 @@
 
 Kind kindTooltip = "tooltip";
 
-TooltipCtrl::TooltipCtrl(HWND p) : WindowBase(p) {
+TooltipCtrl::TooltipCtrl() {
     kind = kindTooltip;
     dwExStyle = WS_EX_TOPMOST;
     dwStyle = WS_POPUP | TTS_NOPREFIX | TTS_ALWAYSTIP;
@@ -30,8 +29,9 @@ TooltipCtrl::~TooltipCtrl() {
     DestroyWindow(hwnd);
 }
 
-bool TooltipCtrl::Create() {
-    bool ok = WindowBase::Create();
+bool TooltipCtrl::Create(HWND parent) {
+    this->parent = parent;
+    bool ok = WindowBase::Create(nullptr);
     SetDelayTime(TTDT_AUTOPOP, 32767);
     return ok;
 }
@@ -76,7 +76,7 @@ void TooltipCtrl::ShowOrUpdate(const WCHAR* txt, Rect& rc, bool multiline) {
     }
 
     constexpr int bufSize = 512;
-    WCHAR buf[bufSize]{0};
+    WCHAR buf[bufSize]{};
     TOOLINFO tiCurr{0};
     tiCurr.cbSize = sizeof(tiCurr);
     tiCurr.hwnd = parent;

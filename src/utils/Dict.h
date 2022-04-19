@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 namespace dict {
@@ -66,5 +66,5 @@ class StringInterner {
         return intToStr.at(n);
     }
 
-    int nInternCalls{0}; // so we know how effective interning is
+    int nInternCalls = 0; // so we know how effective interning is
 };

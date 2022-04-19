@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 #include "BaseUtil.h"
@@ -382,6 +382,13 @@ bool Contains(std::string_view s, const char* txt) {
     return contains;
 }
 
+bool ContainsI(std::string_view s, const char* txt) {
+    // TODO: needs to respect s.size()
+    const char* p = str::FindI(s.data(), txt);
+    bool contains = p != nullptr;
+    return contains;
+}
+
 bool EndsWith(const char* txt, const char* end) {
     if (!txt || !end) {
         return false;
@@ -604,7 +611,7 @@ bool BufFmt(char* buf, size_t bufCchSize, const char* fmt, ...) {
 
 // TODO: need to finish StrFormat and use it instead.
 char* FmtV(const char* fmt, va_list args) {
-    char message[256] = {0};
+    char message[256]{};
     size_t bufCchSize = dimof(message);
     char* buf = message;
     for (;;) {
@@ -638,6 +645,7 @@ char* FmtV(const char* fmt, va_list args) {
     return buf;
 }
 
+// caller needs to str::Free()
 char* Format(const char* fmt, ...) {
     va_list args;
     va_start(args, fmt);
@@ -1003,7 +1011,7 @@ const char* Parse(const char* str, const char* fmt, ...) {
 // TODO: could optimize it by making the main Parse() implementation
 // work with explicit length and not rely on zero-termination
 const char* Parse(const char* str, size_t len, const char* fmt, ...) {
-    char buf[128] = {0};
+    char buf[128]{};
     char* s = buf;
 
     if (!str || !fmt) {
@@ -1156,23 +1164,32 @@ void DecodeInPlace(char* url) {
 // of L1 cache
 namespace seqstrings {
 
-// advance to next string
-// return nullptr if end of strings
-const char* SkipStr(const char* s) {
-    // empty string marks the end, means idx was too high
-    if (!*s) {
-        return nullptr;
+void Next(const char*& s, int& idx) {
+    if (!s || !*s || idx < 0) {
+        s = nullptr;
+        idx = -1;
+        return;
     }
-    // skip past next '\0' char
     while (*s) {
         s++;
     }
-    return s + 1;
+    s++; // skip terminating 0
+    idx++;
 }
 
-char* SkipStr(char* s) {
-    auto res = SkipStr((const char*)s);
-    return (char*)res;
+void Next(const char*& s) {
+    if (!s || !*s) {
+        s = nullptr;
+        return;
+    }
+    while (*s) {
+        s++;
+    }
+    s++; // skip terminating 0
+    if (!*s) {
+        s = nullptr;
+        return;
+    }
 }
 
 // Returns nullptr if s is the same as toFind
@@ -1240,7 +1257,7 @@ const char* IdxToStr(const char* strs, int idx) {
     CrashIf(idx < 0);
     const char* s = strs;
     while (idx > 0) {
-        s = SkipStr(s);
+        Next(s);
         if (!s) {
             return nullptr;
         }
@@ -2039,6 +2056,10 @@ bool Eq(const WCHAR* s1, const WCHAR* s2) {
     return 0 == wcscmp(s1, s2);
 }
 
+bool Eq(std::wstring_view s1, const WCHAR* s2) {
+    return Eq(s1.data(), s2);
+}
+
 // return true if s1 == s2, case insensitive
 bool EqI(const WCHAR* s1, const WCHAR* s2) {
     if (s1 == s2) {
@@ -2359,7 +2380,7 @@ size_t BufAppend(WCHAR* dst, size_t dstCchSize, const WCHAR* s) {
 // format a number with a given thousand separator e.g. it turns 1234 into "1,234"
 // Caller needs to free() the result.
 WCHAR* FormatNumWithThousandSep(i64 num, LCID locale) {
-    WCHAR thousandSep[4] = {0};
+    WCHAR thousandSep[4]{};
     if (!GetLocaleInfo(locale, LOCALE_STHOUSAND, thousandSep, dimof(thousandSep))) {
         str::BufSet(thousandSep, dimof(thousandSep), L",");
     }
@@ -2720,6 +2741,38 @@ ByteSlice ToSpanU8(std::string_view sv) {
     return {(u8*)sv.data(), sv.size()};
 }
 
+#if 0
+// TODO: could increase kVecStrIndexSize when expanding array
+constexpr int kVecStrIndexSize = 128;
+struct VecStrIndex {
+    VecStrIndex* next;
+    int nStrings;
+    char* offsets[kVecStrIndexSize];
+    i32 sizes[kVecStrIndexSize];
+    int ItemsLeft() const;
+};
+
+// Append-only, optimized vector of strings. Allocates from pool allocator, so
+// strings are close together and freed in bulk
+// implemented in BaseUtil.cpp
+struct VecStr {
+    PoolAllocator allocator;
+    VecStrIndex* firstIndex = nullptr;
+    VecStrIndex* currIndex = nullptr;
+
+    VecStr() = default;
+    ~VecStr() = default;
+    void Reset();
+
+    int Size() const;
+    std::string_view at(int) const;
+
+    bool Append(std::string_view sv);
+    bool Exists(std::string_view sv);
+    bool AppendIfNotExists(std::string_view sv);
+};
+
+
 int VecStrIndex::ItemsLeft() const {
     return kVecStrIndexSize - nStrings;
 }
@@ -2784,6 +2837,24 @@ static bool allocateIndexIfNeeded(VecStr& v) {
     return true;
 }
 
+bool VecStr::Exists(std::string_view sv) {
+    int n = Size();
+    for (int i = 0; i < n; i++) {
+        auto s = at(i);
+        if (str::Eq(sv, s)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool VecStr::AppendIfNotExists(std::string_view sv) {
+    if (!Exists(sv)) {
+        return Append(sv);
+    }
+    return false;
+}
+
 bool VecStr::Append(std::string_view sv) {
     bool ok = allocateIndexIfNeeded(*this);
     if (!ok) {
@@ -2808,44 +2879,335 @@ void VecStr::Reset() {
     firstIndex = nullptr;
     currIndex = nullptr;
 }
+#endif
 
-StrVec::StrVec() {
-    // add one character so that we can use index 0 as "not found"
-    str.AppendChar(0);
-}
+//- StrVec
+
+/*
+TODO:
+ - StrVecWithData where it associate arbitrary data with each string
+ - StrVecWithSubset - has additional index which contains a subset
+   of strings which we create by providing a filter function.
+   Could be used for efficiently managing strings in
+   Command Palette
+*/
+
+// represents null string
+constexpr u32 kNullIdx = (u32)-2;
 
 void StrVec::Reset() {
-    str.Reset();
-    str.AppendChar(0);
+    strings.Reset();
     index.Reset();
 }
 
-void StrVec::Append(const char* s) {
-    u32 idx = kNullIdx;
-    size_t sLen;
+int StrVec::Append(const char* s) {
+    bool ok;
     if (s == nullptr) {
-        goto Append;
+        ok = index.Append(kNullIdx);
+        if (!ok) {
+            return -1;
+        }
+        return Size() - 1;
     }
-    sLen = str::Len(s);
-    idx = (u32)str.size();
-    str.Append(s, sLen + 1);
-Append:
-    index.Append(idx);
+    size_t sLen = str::Len(s);
+    u32 idx = (u32)strings.size();
+    ok = strings.Append(s, sLen + 1);
+    if (!ok) {
+        return -1;
+    }
+    ok = index.Append(idx);
+    if (!ok) {
+        return -1;
+    }
+    return Size() - 1;
 }
 
-int StrVec::size() {
+int StrVec::Size() const {
     return index.isize();
 }
 
-std::string_view StrVec::at(int idx) {
-    int n = size();
-    ReportIf(idx < 0 || idx >= n);
+std::string_view StrVec::at(int idx) const {
+    int n = Size();
+    CrashIf(idx < 0 || idx >= n);
     u32 start = index.at(idx);
-    u32 end = (u32)str.size();
+    if (start == kNullIdx) {
+        return {};
+    }
+    u32 end = (u32)strings.size();
     if (idx + 1 < n) {
         end = (u32)index.at(idx + 1);
     }
-    const char* s = str.LendData() + start;
+    const char* s = strings.LendData() + start;
     size_t len = (size_t)(end - start - 1);
     return {s, len};
+}
+
+int StrVec::Find(std::string_view sv, int startAt) const {
+    int n = Size();
+    for (int i = startAt; i < n; i++) {
+        auto s = at(i);
+        if (str::Eq(sv, s)) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+bool StrVec::Exists(std::string_view sv) const {
+    int idx = Find(sv);
+    return idx != -1;
+}
+
+int StrVec::AppendIfNotExists(std::string_view sv) {
+    if (Exists(sv)) {
+        return -1;
+    }
+    return Append(sv.data());
+}
+
+static bool strLess(std::string_view s1, std::string_view s2) {
+    if (s1.empty()) {
+        return true;
+    }
+    if (s1.empty()) {
+        return false;
+    }
+    bool ret = s1 < s2;
+    return ret;
+}
+
+static bool strLessNoCase(std::string_view s1, std::string_view s2) {
+    if (s1.empty()) {
+        return true;
+    }
+    if (s1.empty()) {
+        return false;
+    }
+    size_t n1 = s1.size();
+    size_t n2 = s2.size();
+    for (size_t i = 0; i < n1 && i < n2; i++) {
+        int c1 = tolower(s1[i]);
+        int c2 = tolower(s2[i]);
+        if (c1 == c2) {
+            continue;
+        }
+        return c1 < c2;
+    }
+    return n1 < n2;
+}
+
+#if 0
+void StrVec::Sort(StrLessFunc lessFn) {
+    if (lessFn == nullptr) {
+        lessFn = strLess;
+    }
+
+    // sortedIndex is 0...Size()-1 value
+    // that points into index Vec
+    // starty by fillng sortedIndex with 0...Size()-1
+    // and then sort by swapping indexes
+    u32 n = (u32)index.size();
+    sortedIndex.Reset();
+    for (u32 i = 0; i < n; i++) {
+        sortedIndex.Append(i);
+    }
+    std::sort(sortedIndex.begin(), sortedIndex.end(), [this, lessFn](u32 i1, u32 i2) -> bool {
+        std::string_view is1 = at((int)i1);
+        std::string_view is2 = at((int)i2);
+        bool ret = lessFn(is1, is2);
+        return ret;
+    });
+    isSorted = true;
+}
+#endif
+
+bool StrVec::GetSortedView(StrVecSortedView& view, StrLessFunc lessFn) const {
+    view.v = (StrVec*)this;
+    view.sortedIndex = this->index; // TOOD: verify this works as expected
+
+    if (lessFn == nullptr) {
+        lessFn = strLess;
+    }
+
+    auto& sortedIndex = view.sortedIndex;
+    // sortedIndex is 0...Size()-1 value
+    // that points into index Vec
+    // starty by fillng sortedIndex with 0...Size()-1
+    // and then sort by swapping indexes
+    u32 n = (u32)index.size();
+    sortedIndex.Reset();
+    for (u32 i = 0; i < n; i++) {
+        sortedIndex.Append(i);
+    }
+    std::sort(sortedIndex.begin(), sortedIndex.end(), [this, lessFn](u32 i1, u32 i2) -> bool {
+        std::string_view is1 = at((int)i1);
+        std::string_view is2 = at((int)i2);
+        bool ret = lessFn(is1, is2);
+        return ret;
+    });
+
+    return true;
+}
+
+bool StrVec::GetSortedViewNoCase(StrVecSortedView& view) const {
+    return GetSortedView(view, strLessNoCase);
+}
+
+int StrVecSortedView::Size() const {
+    return sortedIndex.isize();
+}
+
+std::string_view StrVecSortedView::at(int i) const {
+    CrashIf(sortedIndex.size() != v->index.size());
+
+    u32 i2 = sortedIndex[i];
+    return v->at((int)i2);
+}
+
+//- WStrVec
+
+bool wstrLess(std::wstring_view s1, std::wstring_view s2) {
+    if (s1.empty()) {
+        return true;
+    }
+    if (s1.empty()) {
+        return false;
+    }
+    bool ret = s1 < s2;
+    return ret;
+}
+
+bool wstrLessNoCase(std::wstring_view s1, std::wstring_view s2) {
+    if (s1.empty()) {
+        return true;
+    }
+    if (s1.empty()) {
+        return false;
+    }
+    size_t n1 = s1.size();
+    size_t n2 = s2.size();
+    for (size_t i = 0; i < n1 && i < n2; i++) {
+        WCHAR c1 = towlower(s1[i]);
+        WCHAR c2 = towlower(s2[i]);
+        if (c1 == c2) {
+            continue;
+        }
+        return c1 < c2;
+    }
+    return n1 < n2;
+}
+
+void WStrVec2::Reset() {
+    strings.Reset();
+    index.Reset();
+}
+
+// returns index with strings
+int WStrVec2::Append(const WCHAR* s) {
+    bool ok;
+    if (s == nullptr) {
+        ok = index.Append(kNullIdx);
+        if (!ok) {
+            return -1;
+        }
+        return Size() - 1;
+    }
+    size_t sLen = str::Len(s);
+    u32 idx = (u32)strings.size();
+    ok = strings.Append(s, sLen + 1);
+    if (!ok) {
+        return -1;
+    }
+    ok = index.Append(idx);
+    if (!ok) {
+        return -1;
+    }
+    return Size() - 1;
+}
+
+int WStrVec2::Size() const {
+    return index.isize();
+}
+
+size_t WStrVec2::size() const {
+    return index.size();
+}
+
+std::wstring_view WStrVec2::at(int idx) const {
+    int n = Size();
+    CrashIf(idx < 0 || idx >= n);
+    u32 start = index.at(idx);
+    if (start == kNullIdx) {
+        return {};
+    }
+    u32 end = (u32)strings.size();
+    if (idx + 1 < n) {
+        end = (u32)index.at(idx + 1);
+    }
+    const WCHAR* s = strings.LendData() + start;
+    size_t len = (size_t)(end - start - 1);
+    return {s, len};
+}
+
+int WStrVec2::Find(const WCHAR* s, int startAt) const {
+    int n = Size();
+    for (int i = startAt; i < n; i++) {
+        auto s2 = at(i);
+        if (str::Eq(s, s2.data())) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+bool WStrVec2::Exists(std::wstring_view sv) const {
+    int idx = Find(sv.data(), 0);
+    return idx != -1;
+}
+
+int WStrVec2::AppendIfNotExists(std::wstring_view sv) {
+    if (Exists(sv)) {
+        return -1;
+    }
+    return Append(sv.data());
+}
+
+bool WStrVec2::GetSortedView(WStrVecSortedView& view, WStrLessFunc lessFn) const {
+    view.v = (WStrVec2*)this;
+    view.sortedIndex = this->index; // TOOD: verify this works as expected
+
+    if (lessFn == nullptr) {
+        lessFn = wstrLess;
+    }
+
+    auto& sortedIndex = view.sortedIndex;
+    // sortedIndex is 0...Size()-1 value
+    // that points into index Vec
+    // starty by fillng sortedIndex with 0...Size()-1
+    // and then sort by swapping indexes
+    u32 n = (u32)index.size();
+    sortedIndex.Reset();
+    for (u32 i = 0; i < n; i++) {
+        sortedIndex.Append(i);
+    }
+    std::sort(sortedIndex.begin(), sortedIndex.end(), [this, lessFn](u32 i1, u32 i2) -> bool {
+        std::wstring_view is1 = at((int)i1);
+        std::wstring_view is2 = at((int)i2);
+        bool ret = lessFn(is1, is2);
+        return ret;
+    });
+
+    return true;
+}
+bool WStrVec2::GetSortedViewNoCase(WStrVecSortedView& view) const {
+    return GetSortedView(view, wstrLessNoCase);
+}
+
+int WStrVecSortedView::Size() const {
+    return sortedIndex.isize();
+}
+
+std::wstring_view WStrVecSortedView::at(int i) const {
+    u32 idx = sortedIndex[i];
+    return v->at(idx);
 }

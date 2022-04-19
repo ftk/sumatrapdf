@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 #include "utils/BaseUtil.h"
@@ -8,8 +8,9 @@
 #include "utils/ScopedWin.h"
 #include "utils/WinUtil.h"
 
+#include "wingui/UIModels.h"
+
 #include "Annotation.h"
-#include "wingui/TreeModel.h"
 #include "DisplayMode.h"
 #include "Controller.h"
 #include "EngineBase.h"
@@ -25,7 +26,7 @@ static TocItem* NewChmTocItem(TocItem* parent, const WCHAR* title, int pageNo, c
         return res;
     }
 
-    IPageDestination* dest{nullptr};
+    IPageDestination* dest = nullptr;
     if (IsExternalUrl(url)) {
         dest = new PageDestinationURL(url);
     } else {

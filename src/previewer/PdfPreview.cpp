@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 #include "utils/BaseUtil.h"
@@ -6,8 +6,9 @@
 #include "utils/GdiPlusUtil.h"
 #include "utils/WinUtil.h"
 
+#include "wingui/UIModels.h"
+
 #include "Annotation.h"
-#include "wingui/TreeModel.h"
 #include "DisplayMode.h"
 #include "Controller.h"
 #include "EngineBase.h"
@@ -23,7 +24,7 @@ constexpr COLORREF kColWindowBg = RGB(0x99, 0x99, 0x99);
 constexpr int kPreviewMargin = 2;
 constexpr UINT kUwmPaintAgain = (WM_USER + 101);
 
-void _submitDebugReportIfFunc(bool cond, __unused const char* condStr) {
+void _uploadDebugReportIfFunc(bool cond, __unused const char* condStr) {
     // no-op implementation to satisfy SubmitBugReport()
 }
 
@@ -40,7 +41,7 @@ IFACEMETHODIMP PreviewBase::GetThumbnail(uint cx, HBITMAP* phbmp, WTS_ALPHATYPE*
     float zoom = std::min(cx / (float)page.dx, cx / (float)page.dy) - 0.001f;
     Rect thumb = RectF(0, 0, page.dx * zoom, page.dy * zoom).Round();
 
-    BITMAPINFO bmi = {0};
+    BITMAPINFO bmi{};
     bmi.bmiHeader.biSize = sizeof(bmi.bmiHeader);
     bmi.bmiHeader.biHeight = thumb.dy;
     bmi.bmiHeader.biWidth = thumb.dx;
@@ -84,28 +85,28 @@ IFACEMETHODIMP PreviewBase::GetThumbnail(uint cx, HBITMAP* phbmp, WTS_ALPHATYPE*
 }
 
 class PageRenderer {
-    EngineBase* engine{nullptr};
-    HWND hwnd{nullptr};
+    EngineBase* engine = nullptr;
+    HWND hwnd = nullptr;
 
-    int currPage{0};
-    RenderedBitmap* currBmp{nullptr};
+    int currPage = 0;
+    RenderedBitmap* currBmp = nullptr;
     // due to rounding differences, currBmp->Size() and currSize can differ slightly
     Size currSize;
-    int reqPage{0};
+    int reqPage = 0;
     float reqZoom{0.f};
     Size reqSize;
-    bool reqAbort{false};
-    AbortCookie* abortCookie{nullptr};
+    bool reqAbort = false;
+    AbortCookie* abortCookie = nullptr;
 
     CRITICAL_SECTION currAccess;
-    HANDLE thread{nullptr};
+    HANDLE thread = nullptr;
 
     // seeking inside an IStream spins an inner event loop
     // which can cause reentrance in OnPaint and leave an
     // engine semi-initialized when it's called recursively
     // (this only applies for the UI thread where the critical
     // sections can't prevent recursion without the risk of deadlock)
-    bool preventRecursion{false};
+    bool preventRecursion = false;
 
   public:
     PageRenderer(EngineBase* engine, HWND hwnd) {
@@ -224,7 +225,7 @@ static LRESULT OnPaint(HWND hwnd) {
 }
 
 static LRESULT OnVScroll(HWND hwnd, WPARAM wp) {
-    SCROLLINFO si = {0};
+    SCROLLINFO si{};
     si.cbSize = sizeof(si);
     si.fMask = SIF_ALL;
     GetScrollInfo(hwnd, SB_VERT, &si);
@@ -315,7 +316,7 @@ static LRESULT CALLBACK PreviewWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
 IFACEMETHODIMP PreviewBase::DoPreview() {
     log("PreviewBase::DoPreview()\n");
 
-    WNDCLASSEX wcex = {0};
+    WNDCLASSEX wcex{};
     wcex.cbSize = sizeof(wcex);
     wcex.lpfnWndProc = PreviewWndProc;
     wcex.hCursor = LoadCursor(nullptr, IDC_ARROW);
@@ -341,7 +342,7 @@ IFACEMETHODIMP PreviewBase::DoPreview() {
         engine = nullptr;
     }
 
-    SCROLLINFO si = {0};
+    SCROLLINFO si{};
     si.cbSize = sizeof(si);
     si.fMask = SIF_ALL;
     si.nPos = 1;

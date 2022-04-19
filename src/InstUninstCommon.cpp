@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 // code used in both Installer.cpp and Uninstaller.cpp
@@ -15,16 +15,10 @@
 #include "utils/CmdLineArgsIter.h"
 #include "utils/Dpi.h"
 #include "utils/FrameTimeoutCalculator.h"
-#include "utils/ByteOrderDecoder.h"
 #include "utils/LzmaSimpleArchive.h"
 #include "utils/RegistryPaths.h"
 
-#include "wingui/WinGui.h"
 #include "wingui/Layout.h"
-#include "wingui/Window.h"
-#include "wingui/ButtonCtrl.h"
-#include "wingui/CheckboxCtrl.h"
-#include "wingui/EditCtrl.h"
 
 #include "CrashHandler.h"
 #include "Translations.h"
@@ -44,10 +38,12 @@
 #include "utils/Log.h"
 
 // define to 1 to enable shadow effect, to 0 to disable
-#define DRAW_TEXT_SHADOW 1
-#define DRAW_MSG_TEXT_SHADOW 0
+constexpr bool kDrawTextShadow = true;
+constexpr bool kDrawMsgTextShadow = false;
 
-#define TEN_SECONDS_IN_MS 10 * 1000
+#define kInstallerWinBgColor RGB(0xff, 0xf2, 0) // yellow
+
+#define kTenSecondsInMs 10 * 1000
 
 using Gdiplus::Bitmap;
 using Gdiplus::Color;
@@ -81,8 +77,6 @@ Color COLOR_MSG_FAILED(gCol1);
 
 HWND gHwndFrame = nullptr;
 WCHAR* firstError = nullptr;
-HFONT gFontDefault = nullptr;
-bool gShowOptions = false;
 bool gForceCrash = false;
 WCHAR* gMsgError = nullptr;
 int gBottomPartDy = 0;
@@ -124,28 +118,10 @@ void SetMsg(const WCHAR* msg, Color color) {
     gMsgColor = color;
 }
 
-static HFONT CreateDefaultGuiFont() {
-    NONCLIENTMETRICSW ncm{};
-    ncm.cbSize = sizeof(ncm);
-    SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, 0);
-    HFONT f = CreateFontIndirectW(&ncm.lfMenuFont);
-    return f;
-}
-
-static void InvalidateFrame() {
-    Rect rc = ClientRect(gHwndFrame);
-    RECT rcTmp = ToRECT(rc);
-    InvalidateRect(gHwndFrame, &rcTmp, FALSE);
-}
-
-void InitInstallerUninstaller() {
-    gFontDefault = CreateDefaultGuiFont();
-    trans::SetCurrentLangByCode(trans::DetectUserLang());
-}
-
 WCHAR* GetExistingInstallationDir() {
-    AutoFreeWstr REG_PATH_UNINST = GetRegPathUninst(GetAppNameTemp());
-    AutoFreeWstr dir = ReadRegStr2(REG_PATH_UNINST, L"InstallLocation");
+    log("GetExistingInstallationDir()\n");
+    AutoFreeWstr regPathUninst = GetRegPathUninst(GetAppNameTemp());
+    AutoFreeWstr dir = LoggedReadRegStr2(regPathUninst, L"InstallLocation");
     if (!dir) {
         return nullptr;
     }
@@ -167,11 +143,14 @@ WCHAR* GetExistingInstallationFilePath(const WCHAR* name) {
 }
 
 WCHAR* GetInstallDirTemp() {
+    logf(L"GetInstallDirTemp() => %s\n", gCli->installDir);
     return gCli->installDir;
 }
 
 WCHAR* GetInstallationFilePath(const WCHAR* name) {
-    return path::Join(gCli->installDir, name);
+    auto res = path::Join(gCli->installDir, name);
+    logf(L"GetInstallationFilePath(%s) = > %s\n", name, res);
+    return res;
 }
 
 WCHAR* GetInstalledExePath() {
@@ -189,8 +168,14 @@ WCHAR* GetShortcutPath(int csidl) {
     return path::Join(dir, lnkName);
 }
 
+#ifndef _WIN64
+#define kRegPathPlugin L"Software\\MozillaPlugins\\@mozilla.zeniko.ch/SumatraPDF_Browser_Plugin"
+#else
+#define kRegPathPlugin L"Software\\MozillaPlugins\\@mozilla.zeniko.ch/SumatraPDF_Browser_Plugin_x64"
+#endif
+
 WCHAR* GetInstalledBrowserPluginPath() {
-    return ReadRegStr2(REG_PATH_PLUGIN, L"Path");
+    return LoggedReadRegStr2(kRegPathPlugin, L"Path");
 }
 
 static bool SkipProcessByID(DWORD procID) {
@@ -217,7 +202,7 @@ static bool IsProcessUsingFiles(DWORD procId, WCHAR* file1, WCHAR* file2) {
         return false;
     }
 
-    MODULEENTRY32 mod = {0};
+    MODULEENTRY32 mod{};
     mod.dwSize = sizeof(mod);
     BOOL cont = Module32First(snap, &mod);
     while (cont) {
@@ -233,8 +218,11 @@ static bool IsProcessUsingFiles(DWORD procId, WCHAR* file1, WCHAR* file2) {
     return false;
 }
 
+#define kBrowserPluginName L"npPdfViewer.dll"
+
 void UninstallBrowserPlugin() {
-    AutoFreeWstr dllPath = GetExistingInstallationFilePath(BROWSER_PLUGIN_NAME);
+    log("UninstallBrowserPlugin()\n");
+    AutoFreeWstr dllPath = GetExistingInstallationFilePath(kBrowserPluginName);
     if (!file::Exists(dllPath)) {
         // uninstall the detected plugin, even if it isn't in the target installation path
         dllPath.Set(GetInstalledBrowserPluginPath());
@@ -244,33 +232,38 @@ void UninstallBrowserPlugin() {
     }
     bool ok = UnRegisterServerDLL(dllPath);
     if (ok) {
-        log("did uninstall browser plugin\n");
+        log("  did uninstall browser plugin\n");
         return;
     }
-    log("failed to uninstall browser plugin\n");
+    log("  failed to uninstall browser plugin\n");
     NotifyFailed(_TR("Couldn't uninstall browser plugin"));
 }
 
 bool IsSearchFilterInstalled() {
     const WCHAR* key = L".pdf\\PersistentHandler";
-    AutoFreeWstr iid = ReadRegStr(HKEY_CLASSES_ROOT, key, nullptr);
-    return str::EqI(iid, SZ_PDF_FILTER_HANDLER);
+    AutoFreeWstr iid = LoggedReadRegStr(HKEY_CLASSES_ROOT, key, nullptr);
+    bool isInstalled = str::EqI(iid, SZ_PDF_FILTER_HANDLER);
+    logf("IsSearchFilterInstalled() isInstalled=%d\n", isInstalled);
+    return isInstalled;
 }
 
 bool IsPreviewerInstalled() {
     const WCHAR* key = L".pdf\\shellex\\{8895b1c6-b41f-4c1c-a562-0d564250836f}";
-    AutoFreeWstr iid = ReadRegStr(HKEY_CLASSES_ROOT, key, nullptr);
-    return str::EqI(iid, SZ_PDF_PREVIEW_CLSID);
+    AutoFreeWstr iid = LoggedReadRegStr(HKEY_CLASSES_ROOT, key, nullptr);
+    bool isInstalled = str::EqI(iid, SZ_PDF_PREVIEW_CLSID);
+    logf("IsPreviewerInstalled() isInstalled=%d\n", isInstalled);
+    return isInstalled;
 }
 
 void RegisterSearchFilter(bool silent) {
     AutoFreeWstr dllPath = GetInstallationFilePath(SEARCH_FILTER_DLL_NAME);
+    logf(L"RegisterSearchFilter(silent=%d) dllPath=%s\n", silent, dllPath.Get());
     bool ok = RegisterServerDLL(dllPath);
     if (ok) {
-        logf(L"registered search filter in dll '%s'\n", dllPath.Get());
+        log("  did registe\n");
         return;
     }
-    logf(L"failed to register search filter in dll '%s'\n", dllPath.Get());
+    log("  failed to register\n");
     if (silent) {
         return;
     }
@@ -279,12 +272,13 @@ void RegisterSearchFilter(bool silent) {
 
 void UnRegisterSearchFilter(bool silent) {
     AutoFreeWstr dllPath = GetExistingInstallationFilePath(SEARCH_FILTER_DLL_NAME);
+    logf("UnRegisterSearchFilter(silent=%d) dllPath=%s\n", silent, dllPath.Get());
     bool ok = UnRegisterServerDLL(dllPath);
     if (ok) {
-        logf(L"unregistered search filter in dll '%s'\n", dllPath.Get());
+        log(L"  did unregister\n");
         return;
     }
-    logf(L"failed to unregister search filter in dll '%s'\n", dllPath.Get());
+    log("  failed to unregister\n");
     if (silent) {
         return;
     }
@@ -293,28 +287,30 @@ void UnRegisterSearchFilter(bool silent) {
 
 void RegisterPreviewer(bool silent) {
     AutoFreeWstr dllPath = GetInstallationFilePath(PREVIEW_DLL_NAME);
+    logf("RegisterPreviewer(silent=%d) dllPath=%s\n", silent, dllPath.Get());
     // TODO: RegisterServerDLL(dllPath, true, L"exts:pdf,...");
     bool ok = RegisterServerDLL(dllPath);
     if (ok) {
-        logf(L"registered previewer in dll '%s'\n", dllPath.Get());
+        log("  did register\n");
         return;
     }
     if (silent) {
         return;
     }
-    logf(L"failed to register previewer in dll '%s'\n", dllPath.Get());
+    log("  failed to register\n");
     NotifyFailed(_TR("Couldn't install PDF previewer"));
 }
 
 void UnRegisterPreviewer(bool silent) {
     AutoFreeWstr dllPath = GetExistingInstallationFilePath(PREVIEW_DLL_NAME);
+    logf("UnRegisterPreviewer(silent=%d) dllPath=%s\n", silent, dllPath.Get());
     // TODO: RegisterServerDLL(dllPath, false, L"exts:pdf,...");
     bool ok = UnRegisterServerDLL(dllPath);
     if (ok) {
-        logf(L"unregistered previewer in dll '%s'\n", dllPath.Get());
+        log("  did unregister\n");
         return;
     }
-    logf(L"failed to unregister previewer in dll '%s'\n", dllPath.Get());
+    log(" failed to unregister\n");
     if (silent) {
         return;
     }
@@ -327,7 +323,7 @@ static bool IsProcWithModule(DWORD processId, const WCHAR* modulePath) {
         return false;
     }
 
-    MODULEENTRY32W me32 = {0};
+    MODULEENTRY32W me32{};
     me32.dwSize = sizeof(me32);
     BOOL ok = Module32FirstW(hModSnapshot, &me32);
     while (ok) {
@@ -340,6 +336,7 @@ static bool IsProcWithModule(DWORD processId, const WCHAR* modulePath) {
 }
 
 static bool KillProcWithId(DWORD processId, bool waitUntilTerminated) {
+    logf("KillProcWithId(processId=%d)\n", (int)processId);
     BOOL inheritHandle = FALSE;
     // Note: do I need PROCESS_QUERY_INFORMATION and PROCESS_VM_READ?
     DWORD dwAccess = PROCESS_QUERY_INFORMATION | PROCESS_VM_READ | PROCESS_TERMINATE;
@@ -354,7 +351,7 @@ static bool KillProcWithId(DWORD processId, bool waitUntilTerminated) {
     }
 
     if (waitUntilTerminated) {
-        WaitForSingleObject(hProcess, TEN_SECONDS_IN_MS);
+        WaitForSingleObject(hProcess, kTenSecondsInMs);
     }
 
     return true;
@@ -364,6 +361,7 @@ static bool KillProcWithId(DWORD processId, bool waitUntilTerminated) {
 // If <waitUntilTerminated> is true, will wait until process is fully killed.
 // Returns TRUE if killed a process
 static bool KillProcWithIdAndModule(DWORD processId, const WCHAR* modulePath, bool waitUntilTerminated) {
+    logf(L"KillProcWithIdAndModule() processId=%d, modulePath=%s\n", processId, modulePath);
     if (!IsProcWithModule(processId, modulePath)) {
         return false;
     }
@@ -382,7 +380,7 @@ static bool KillProcWithIdAndModule(DWORD processId, const WCHAR* modulePath, bo
     }
 
     if (waitUntilTerminated) {
-        WaitForSingleObject(hProcess, TEN_SECONDS_IN_MS);
+        WaitForSingleObject(hProcess, kTenSecondsInMs);
     }
 
     return true;
@@ -408,7 +406,7 @@ int KillProcessesWithModule(const WCHAR* modulePath, bool waitUntilTerminated) {
     int killCount = 0;
     do {
         if (KillProcWithIdAndModule(pe32.th32ProcessID, modulePath, waitUntilTerminated)) {
-            logf("Killed process with id %d\n", (int)pe32.th32ProcessID);
+            logf("  killed process with id %d\n", (int)pe32.th32ProcessID);
             killCount++;
         }
     } while (Process32Next(hProcSnapshot, &pe32));
@@ -428,12 +426,13 @@ int KillProcessesWithModule(const WCHAR* modulePath, bool waitUntilTerminated) {
 // that load PdfPreview.dll or PdfFilter.dll (which link to libmupdf.dll)
 // returns false if there are processes and we failed to kill them
 bool KillProcessesUsingInstallation() {
+    log("KillProcessesUsingInstallation()\n");
     AutoFreeWstr dir = GetExistingInstallationDir();
     if (dir.empty()) {
         return true;
     }
     AutoFreeWstr libmupdf = path::Join(dir, L"libmupdf.dll");
-    AutoFreeWstr browserPlugin = path::Join(dir, BROWSER_PLUGIN_NAME);
+    AutoFreeWstr browserPlugin = path::Join(dir, kBrowserPluginName);
 
     AutoCloseHandle snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (INVALID_HANDLE_VALUE == snap) {
@@ -441,15 +440,15 @@ bool KillProcessesUsingInstallation() {
     }
 
     bool killedAllProcesses = true;
-    PROCESSENTRY32W proc = {0};
+    PROCESSENTRY32W proc{};
     proc.dwSize = sizeof(proc);
     BOOL ok = Process32First(snap, &proc);
     while (ok) {
         DWORD procID = proc.th32ProcessID;
         if (IsProcessUsingFiles(procID, libmupdf, browserPlugin)) {
-            logf(L"KillProcessesUsingInstallation: attempting to kill process %d '%s'\n", (int)procID, proc.szExeFile);
+            logf(L"  attempting to kill process %d '%s'\n", (int)procID, proc.szExeFile);
             bool didKill = KillProcWithId(procID, true);
-            logf("KillProcessesUsingInstallation: KillProcWithId(%d) returned %d\n", procID, (int)didKill);
+            logf("  KillProcWithId(%d) returned %d\n", procID, (int)didKill);
             if (!didKill) {
                 killedAllProcesses = false;
             }
@@ -463,19 +462,20 @@ bool KillProcessesUsingInstallation() {
 // return names of processes that are running part of the installation
 // (i.e. have libmupdf.dll or npPdfViewer.dll loaded)
 static void ProcessesUsingInstallation(WStrVec& names) {
+    log("ProcessesUsingInstallation()\n");
     AutoFreeWstr dir = GetExistingInstallationDir();
     if (dir.empty()) {
         return;
     }
     AutoFreeWstr libmupdf = path::Join(dir, L"libmupdf.dll");
-    AutoFreeWstr browserPlugin = path::Join(dir, BROWSER_PLUGIN_NAME);
+    AutoFreeWstr browserPlugin = path::Join(dir, kBrowserPluginName);
 
     AutoCloseHandle snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (INVALID_HANDLE_VALUE == snap) {
         return;
     }
 
-    PROCESSENTRY32W proc = {0};
+    PROCESSENTRY32W proc{};
     proc.dwSize = sizeof(proc);
     BOOL ok = Process32First(snap, &proc);
     while (ok) {
@@ -532,9 +532,14 @@ void SetDefaultMsg() {
     SetMsg(gDefaultMsg, COLOR_MSG_WELCOME);
 }
 
+void InvalidateFrame() {
+    HwndInvalidate(gHwndFrame);
+}
+
 bool CheckInstallUninstallPossible(bool silent) {
-    bool ok = KillProcessesUsingInstallation();
-    logf("CheckInstallUninstallPossible: KillProcessesUsingInstallation() returned %d\n", ok);
+    logf("CheckInstallUninstallPossible(silent=%d)\n", silent);
+    KillProcessesUsingInstallation();
+    // logf("CheckInstallUninstallPossible: KillProcessesUsingInstallation() returned %d\n", ok);
 
     // now determine which processes are using installation files
     // and ask user to close them.
@@ -555,24 +560,6 @@ bool CheckInstallUninstallPossible(bool silent) {
     InvalidateFrame();
 
     return possible;
-}
-
-ButtonCtrl* CreateDefaultButtonCtrl(HWND hwndParent, const WCHAR* s) {
-    auto* b = new ButtonCtrl(hwndParent);
-    b->SetText(s);
-    b->Create();
-
-    RECT r;
-    GetClientRect(hwndParent, &r);
-    Size size = b->GetIdealSize();
-    int x = RectDx(r) - size.dx - WINDOW_MARGIN;
-    int y = RectDy(r) - size.dy - WINDOW_MARGIN;
-    r.left = x;
-    r.right = x + size.dx;
-    r.top = y;
-    r.bottom = y + size.dy;
-    b->SetPos(&r);
-    return b;
 }
 
 // This display is inspired by http://letteringjs.com/
@@ -602,8 +589,6 @@ LetterInfo gLetters[] = {
     {'F', gCol1, gCol1Shadow, 0.f, 0, 0, 0}
 };
 // clang-format on
-
-#define SUMATRA_LETTERS_COUNT (dimof(gLetters))
 
 #if 0
 static char RandUppercaseLetter()
@@ -635,8 +620,10 @@ static void SetLettersSumatraUpTo(int n) {
     }
 }
 
+#define kSumatraLettersCount (dimof(gLetters))
+
 static void SetLettersSumatra() {
-    SetLettersSumatraUpTo(SUMATRA_LETTERS_COUNT);
+    SetLettersSumatraUpTo(kSumatraLettersCount);
 }
 
 // an animation that reveals letters one by one
@@ -649,7 +636,7 @@ static FrameTimeoutCalculator* gRevealingLettersAnim = nullptr;
 int gRevealingLettersAnimLettersToShow;
 
 static void RevealingLettersAnimStart() {
-    int framesPerSec = (int)(double(SUMATRA_LETTERS_COUNT) / REVEALING_ANIM_DUR);
+    int framesPerSec = (int)(double(kSumatraLettersCount) / REVEALING_ANIM_DUR);
     gRevealingLettersAnim = new FrameTimeoutCalculator(framesPerSec);
     gRevealingLettersAnimLettersToShow = 0;
     SetLettersSumatraUpTo(0);
@@ -692,7 +679,7 @@ static void CalcLettersLayout(Graphics& g, Font* f, int dx) {
     StringFormat sfmt;
     const float letterSpacing = -12.f;
     float totalDx = -letterSpacing; // counter last iteration of the loop
-    WCHAR s[2] = {0};
+    WCHAR s[2]{};
     Gdiplus::PointF origin(0.f, 0.f);
     Gdiplus::RectF bbox;
     for (int i = 0; i < dimof(gLetters); i++) {
@@ -730,8 +717,8 @@ static float DrawMessage(Graphics& g, const WCHAR* msg, float y, float dx, Color
     if (trans::IsCurrLangRtl()) {
         sft.SetFormatFlags(StringFormatFlagsDirectionRightToLeft);
     }
-#if DRAW_MSG_TEXT_SHADOW
-    {
+
+    if (kDrawMsgTextShadow) {
         bbox.X--;
         bbox.Y++;
         SolidBrush b(Color(0xff, 0xff, 0xff));
@@ -739,7 +726,7 @@ static float DrawMessage(Graphics& g, const WCHAR* msg, float y, float dx, Color
         bbox.X++;
         bbox.Y--;
     }
-#endif
+
     SolidBrush b(color);
     g.DrawString(s, -1, &f, bbox, &sft, &b);
 
@@ -748,7 +735,7 @@ static float DrawMessage(Graphics& g, const WCHAR* msg, float y, float dx, Color
 
 static void DrawSumatraLetters(Graphics& g, Font* f, Font* fVer, float y) {
     LetterInfo* li;
-    WCHAR s[2] = {0};
+    WCHAR s[2]{};
     for (int i = 0; i < dimof(gLetters); i++) {
         li = &gLetters[i];
         s[0] = li->c;
@@ -757,12 +744,12 @@ static void DrawSumatraLetters(Graphics& g, Font* f, Font* fVer, float y) {
         }
 
         g.RotateTransform(li->rotation, MatrixOrderAppend);
-#if DRAW_TEXT_SHADOW
-        // draw shadow first
-        SolidBrush b2(li->colShadow);
-        Gdiplus::PointF o2(li->x - 3.f, y + 4.f + li->dyOff);
-        g.DrawString(s, 1, f, o2, &b2);
-#endif
+        if (kDrawTextShadow) {
+            // draw shadow first
+            SolidBrush b2(li->colShadow);
+            Gdiplus::PointF o2(li->x - 3.f, y + 4.f + li->dyOff);
+            g.DrawString(s, 1, f, o2, &b2);
+        }
 
         SolidBrush b1(li->col);
         Gdiplus::PointF o1(li->x, y + li->dyOff);
@@ -779,16 +766,16 @@ static void DrawSumatraLetters(Graphics& g, Font* f, Font* fVer, float y) {
     float y2 = -34;
 
     const WCHAR* ver_s = L"v" CURR_VERSION_STR;
-#if DRAW_TEXT_SHADOW
-    SolidBrush b1(Color(0, 0, 0));
-    g.DrawString(ver_s, -1, fVer, Gdiplus::PointF(x2 - 2, y2 - 1), &b1);
-#endif
+    if (kDrawTextShadow) {
+        SolidBrush b1(Color(0, 0, 0));
+        g.DrawString(ver_s, -1, fVer, Gdiplus::PointF(x2 - 2, y2 - 1), &b1);
+    }
     SolidBrush b2(Color(0xff, 0xff, 0xff));
     g.DrawString(ver_s, -1, fVer, Gdiplus::PointF(x2, y2), &b2);
     g.ResetTransform();
 }
 
-static void DrawFrame2(Graphics& g, Rect r) {
+static void DrawFrame2(Graphics& g, Rect r, bool skipMessage) {
     g.SetCompositingQuality(CompositingQualityHighQuality);
     g.SetSmoothingMode(SmoothingModeAntiAlias);
     g.SetPageUnit(Gdiplus::UnitPixel);
@@ -797,7 +784,7 @@ static void DrawFrame2(Graphics& g, Rect r) {
     CalcLettersLayout(g, &f, r.dx);
 
     Gdiplus::Color bgCol;
-    bgCol.SetFromCOLORREF(WIN_BG_COLOR);
+    bgCol.SetFromCOLORREF(kInstallerWinBgColor);
     SolidBrush bgBrush(bgCol);
     Gdiplus::Rect r2(ToGdipRect(r));
     r2.Inflate(1, 1);
@@ -806,7 +793,7 @@ static void DrawFrame2(Graphics& g, Rect r) {
     Font f2(L"Impact", 16, FontStyleRegular);
     DrawSumatraLetters(g, &f, &f2, 18.f);
 
-    if (gShowOptions) {
+    if (skipMessage) {
         return;
     }
 
@@ -819,19 +806,19 @@ static void DrawFrame2(Graphics& g, Rect r) {
     }
 }
 
-static void DrawFrame(HWND hwnd, HDC dc, PAINTSTRUCT*) {
+static void DrawFrame(HWND hwnd, HDC dc, PAINTSTRUCT*, bool skipMessage) {
     // TODO: cache bmp object?
     Graphics g(dc);
     Rect rc = ClientRect(hwnd);
     Bitmap bmp(rc.dx, rc.dy, &g);
     Graphics g2((Image*)&bmp);
-    DrawFrame2(g2, rc);
+    DrawFrame2(g2, rc, skipMessage);
     g.DrawImage(&bmp, 0, 0);
 }
 
-void OnPaintFrame(HWND hwnd) {
+void OnPaintFrame(HWND hwnd, bool skipMessage) {
     PAINTSTRUCT ps;
     HDC dc = BeginPaint(hwnd, &ps);
-    DrawFrame(hwnd, dc, &ps);
+    DrawFrame(hwnd, dc, &ps, skipMessage);
     EndPaint(hwnd, &ps);
 }

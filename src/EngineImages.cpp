@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 #include "utils/BaseUtil.h"
@@ -15,7 +15,8 @@
 #include "utils/DirIter.h"
 #include "utils/Log.h"
 
-#include "wingui/TreeModel.h"
+#include "wingui/UIModels.h"
+
 #include "FzImgReader.h"
 #include "DisplayMode.h"
 #include "Controller.h"
@@ -506,8 +507,8 @@ class EngineImage : public EngineImages {
     static EngineBase* CreateFromStream(IStream* stream);
 
   protected:
-    Bitmap* image{nullptr};
-    const WCHAR* fileExt{nullptr};
+    Bitmap* image = nullptr;
+    const WCHAR* fileExt = nullptr;
 
     bool LoadSingleFile(const WCHAR* fileName);
     bool LoadFromStream(IStream* stream);

@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 /*
@@ -13,67 +13,62 @@ The installer is good enough for production but it doesn't mean it couldn't be i
 #include "utils/BaseUtil.h"
 #include "utils/ScopedWin.h"
 #include "utils/WinDynCalls.h"
-#include <tlhelp32.h>
-#include <io.h>
 #include "utils/FileUtil.h"
-#include "Translations.h"
-#include "resource.h"
 #include "utils/Timer.h"
-#include "Version.h"
+
 #include "utils/WinUtil.h"
 #include "utils/CmdLineArgsIter.h"
-#include "CrashHandler.h"
 #include "utils/Dpi.h"
 #include "utils/FrameTimeoutCalculator.h"
 #include "utils/Log.h"
 #include "utils/RegistryPaths.h"
 #include "utils/GdiPlusUtil.h"
 
-#include "wingui/WinGui.h"
+#include <tlhelp32.h>
+#include <io.h>
+#include "Translations.h"
+#include "Version.h"
+
+#include "wingui/UIModels.h"
+
 #include "wingui/Layout.h"
-#include "wingui/Window.h"
-#include "wingui/ButtonCtrl.h"
-#include "wingui/CheckboxCtrl.h"
-#include "wingui/EditCtrl.h"
-#include "wingui/ImageCtrl.h"
-#include "wingui/StaticCtrl.h"
+#include "wingui/wingui2.h"
 
 #include "SumatraConfig.h"
 #include "DisplayMode.h"
-#include "SettingsStructs.h"
-#include "GlobalPrefs.h"
 #include "Flags.h"
 #include "SumatraPDF.h"
 #include "Installer.h"
 #include "AppUtil.h"
 
-#define UNINSTALLER_WIN_DX INSTALLER_WIN_DX
-#define UNINSTALLER_WIN_DY INSTALLER_WIN_DY
+using namespace wg;
 
 static HBRUSH ghbrBackground = nullptr;
 static HANDLE hThread = nullptr;
 static bool success = false;
-static ButtonCtrl* gButtonExit = nullptr;
-static ButtonCtrl* gButtonUninstaller = nullptr;
+static Button* gButtonExit = nullptr;
+static Button* gButtonUninstaller = nullptr;
 static bool gWasSearchFilterInstalled = false;
 static bool gWasPreviewInstaller = false;
+static char* gUninstallerLogPath = nullptr;
 
 static void OnButtonExit() {
     SendMessageW(gHwndFrame, WM_CLOSE, 0, 0);
 }
 
 static void CreateButtonExit(HWND hwndParent) {
-    gButtonExit = CreateDefaultButtonCtrl(hwndParent, _TR("Close"));
+    gButtonExit = CreateDefaultButton(hwndParent, _TR("Close"));
     gButtonExit->onClicked = OnButtonExit;
 }
 
 static bool RemoveUninstallerRegistryInfo(HKEY hkey) {
-    AutoFreeWstr REG_PATH_UNINST = GetRegPathUninst(GetAppNameTemp());
-    bool ok1 = DeleteRegKey(hkey, REG_PATH_UNINST);
+    logf("RemoveUninstallerRegistryInfo(%s)\n", RegKeyNameTemp(hkey));
+    AutoFreeWstr regPathUninst = GetRegPathUninst(GetAppNameTemp());
+    bool ok1 = LoggedDeleteRegKey(hkey, regPathUninst);
     // legacy, this key was added by installers up to version 1.8
     const WCHAR* appName = GetAppNameTemp();
     AutoFreeWstr key = str::Join(L"Software\\", appName);
-    bool ok2 = DeleteRegKey(hkey, key);
+    bool ok2 = LoggedDeleteRegKey(hkey, key);
     return ok1 && ok2;
 }
 
@@ -83,46 +78,52 @@ static bool RemoveUninstallerRegistryInfo() {
     return ok1 || ok2;
 }
 
+// TODO: this method no longer works
+#if 0
 /* Undo what DoAssociateExeWithPdfExtension() in AppTools.cpp did */
 static void UnregisterFromBeingDefaultViewer(HKEY hkey) {
-    AutoFreeWstr curr = ReadRegStr(hkey, REG_CLASSES_PDF, nullptr);
-    AutoFreeWstr REG_CLASSES_APP = GetRegClassesApp(GetAppNameTemp());
-    AutoFreeWstr prev = ReadRegStr(hkey, REG_CLASSES_APP, L"previous.pdf");
+    logf("UnregisterFromBeingDefaultViewer()\n");
+    AutoFreeWstr curr = LoggedReadRegStr(hkey, kRegClassesPdf, nullptr);
+    AutoFreeWstr regClassesApp = GetRegClassesApp(GetAppNameTemp());
+    AutoFreeWstr prev = LoggedReadRegStr(hkey, regClassesApp, L"previous.pdf");
     const WCHAR* appName = GetAppNameTemp();
     if (!curr || !str::Eq(curr, appName)) {
         // not the default, do nothing
     } else if (prev) {
-        WriteRegStr(hkey, REG_CLASSES_PDF, nullptr, prev);
+        LoggedWriteRegStr(hkey, kRegClassesPdf, nullptr, prev);
     } else {
 #pragma warning(push)
 #pragma warning(disable : 6387) // silence /analyze: '_Param_(3)' could be '0':  this does not adhere to the
                                 // specification for the function 'SHDeleteValueW'
-        SHDeleteValue(hkey, REG_CLASSES_PDF, nullptr);
+        SHDeleteValueW(hkey, kRegClassesPdf, nullptr);
 #pragma warning(pop)
     }
 
     // the following settings overrule HKEY_CLASSES_ROOT\.pdf
-    AutoFreeWstr buf = ReadRegStr(HKEY_CURRENT_USER, REG_EXPLORER_PDF_EXT, PROG_ID);
+    AutoFreeWstr buf = LoggedReadRegStr(HKEY_CURRENT_USER, kRegExplorerPdfExt, kRegProgId);
     if (str::Eq(buf, appName)) {
-        LONG res = SHDeleteValue(HKEY_CURRENT_USER, REG_EXPLORER_PDF_EXT, PROG_ID);
+        LONG res = SHDeleteValueW(HKEY_CURRENT_USER, kRegExplorerPdfExt, kRegProgId);
         if (res != ERROR_SUCCESS) {
             LogLastError(res);
         }
     }
-    buf.Set(ReadRegStr(HKEY_CURRENT_USER, REG_EXPLORER_PDF_EXT, APPLICATION));
+    const WCHAR* kRegApplication = L"Application";
+    buf.Set(LoggedReadRegStr(HKEY_CURRENT_USER, kRegExplorerPdfExt, kRegApplication));
     const WCHAR* exeName = GetExeNameTemp();
     if (str::EqI(buf, exeName)) {
-        LONG res = SHDeleteValue(HKEY_CURRENT_USER, REG_EXPLORER_PDF_EXT, APPLICATION);
+        LONG res = SHDeleteValue(HKEY_CURRENT_USER, kRegExplorerPdfExt, kRegApplication);
         if (res != ERROR_SUCCESS) {
             LogLastError(res);
         }
     }
-    buf.Set(ReadRegStr(HKEY_CURRENT_USER, REG_EXPLORER_PDF_EXT L"\\UserChoice", PROG_ID));
+    buf.Set(LoggedReadRegStr(HKEY_CURRENT_USER, kRegExplorerPdfExt L"\\UserChoice", kRegProgId));
     if (str::Eq(buf, appName)) {
-        DeleteRegKey(HKEY_CURRENT_USER, REG_EXPLORER_PDF_EXT L"\\UserChoice", true);
+        LoggedDeleteRegKey(HKEY_CURRENT_USER, kRegExplorerPdfExt L"\\UserChoice", true);
     }
 }
+#endif
 
+// delete registry key but only if it's empty
 static bool DeleteEmptyRegKey(HKEY root, const WCHAR* keyName) {
     HKEY hkey;
     LSTATUS status = RegOpenKeyExW(root, keyName, 0, KEY_READ, &hkey);
@@ -138,29 +139,34 @@ static bool DeleteEmptyRegKey(HKEY root, const WCHAR* keyName) {
         isEmpty = 0 == subkeys && 0 == values;
     }
     RegCloseKey(hkey);
-
-    if (isEmpty) {
-        DeleteRegKey(root, keyName);
+    if (!isEmpty) {
+        return isEmpty;
     }
+
+    LoggedDeleteRegKey(root, keyName);
     return isEmpty;
 }
 
 static void RemoveOwnRegistryKeys(HKEY hkey) {
-    UnregisterFromBeingDefaultViewer(hkey);
+    if (!hkey) {
+        return;
+    }
+    logf("RemoveOwnRegistryKeys(%s)\n", RegKeyNameTemp(hkey));
+    //UnregisterFromBeingDefaultViewer(hkey);
     const WCHAR* appName = GetAppNameTemp();
     const WCHAR* exeName = GetExeNameTemp();
     AutoFreeWstr regClassApp = GetRegClassesApp(appName);
-    DeleteRegKey(hkey, regClassApp);
+    LoggedDeleteRegKey(hkey, regClassApp);
     AutoFreeWstr regClassApps = GetRegClassesApps(appName);
-    DeleteRegKey(hkey, regClassApps);
+    LoggedDeleteRegKey(hkey, regClassApps);
     {
-        AutoFreeWstr key = str::Join(REG_CLASSES_PDF, L"\\OpenWithProgids");
+        AutoFreeWstr key = str::Join(kRegClassesPdf, L"\\OpenWithProgids");
         SHDeleteValueW(hkey, key, appName);
     }
 
     if (HKEY_LOCAL_MACHINE == hkey) {
         AutoFreeWstr key = str::Join(L"Software\\Microsoft\\Windows\\CurrentVersion\\App Paths\\", exeName);
-        DeleteRegKey(hkey, key);
+        LoggedDeleteRegKey(hkey, key);
     }
 
     const WCHAR** supportedExts = GetSupportedExts();
@@ -171,7 +177,7 @@ static void RemoveOwnRegistryKeys(HKEY hkey) {
         DeleteEmptyRegKey(hkey, keyname);
 
         keyname.Set(str::Join(L"Software\\Classes\\", supportedExts[j], openWithVal));
-        if (!DeleteRegKey(hkey, keyname)) {
+        if (!LoggedDeleteRegKey(hkey, keyname)) {
             continue;
         }
         // remove empty keys that the installer might have created
@@ -186,7 +192,7 @@ static void RemoveOwnRegistryKeys(HKEY hkey) {
     // delete keys written in ListAsDefaultProgramWin10()
     SHDeleteValue(hkey, L"SOFTWARE\\RegisteredApplications", appName);
     AutoFreeWstr keyName = str::Format(L"SOFTWARE\\%s\\Capabilities", appName);
-    DeleteRegKey(hkey, keyName);
+    LoggedDeleteRegKey(hkey, keyName);
 }
 
 static void RemoveOwnRegistryKeys() {
@@ -297,12 +303,6 @@ static DWORD WINAPI UninstallerThread(__unused LPVOID data) {
     return 0;
 }
 
-static void InvalidateFrame() {
-    Rect rc = ClientRect(gHwndFrame);
-    RECT rcTmp = ToRECT(rc);
-    InvalidateRect(gHwndFrame, &rcTmp, FALSE);
-}
-
 static void OnButtonUninstall() {
     if (!CheckInstallUninstallPossible()) {
         return;
@@ -311,7 +311,7 @@ static void OnButtonUninstall() {
     // disable the button during uninstallation
     gButtonUninstaller->SetIsEnabled(false);
     SetMsg(_TR("Uninstallation in progress..."), COLOR_MSG_INSTALLATION);
-    InvalidateFrame();
+    HwndInvalidate(gHwndFrame);
 
     hThread = CreateThread(nullptr, 0, UninstallerThread, nullptr, 0, nullptr);
 }
@@ -322,7 +322,7 @@ void OnUninstallationFinished() {
     CreateButtonExit(gHwndFrame);
     SetMsg(_TR("SumatraPDF has been uninstalled."), gMsgError ? COLOR_MSG_FAILED : COLOR_MSG_OK);
     gMsgError = firstError;
-    InvalidateFrame();
+    HwndInvalidate(gHwndFrame);
 
     CloseHandle(hThread);
 }
@@ -340,7 +340,7 @@ static bool UninstallerOnWmCommand(WPARAM wp) {
 }
 
 static void OnCreateWindow(HWND hwnd) {
-    gButtonUninstaller = CreateDefaultButtonCtrl(hwnd, _TR("Uninstall SumatraPDF"));
+    gButtonUninstaller = CreateDefaultButton(hwnd, _TR("Uninstall SumatraPDF"));
     gButtonUninstaller->onClicked = OnButtonUninstall;
 }
 
@@ -348,11 +348,11 @@ static void CreateMainWindow() {
     AutoFreeWstr title = str::Format(_TR("SumatraPDF %s Uninstaller"), CURR_VERSION_STR);
     int x = CW_USEDEFAULT;
     int y = CW_USEDEFAULT;
-    int dx = DpiScale(INSTALLER_WIN_DX);
-    int dy = DpiScale(INSTALLER_WIN_DY);
+    int dx = DpiScale(kInstallerWinDx);
+    int dy = DpiScale(kInstallerWinDy);
     HMODULE h = GetModuleHandleW(nullptr);
     DWORD dwStyle = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_CLIPCHILDREN;
-    auto winCls = INSTALLER_FRAME_CLASS_NAME;
+    auto winCls = kInstallerWindowClassName;
     gHwndFrame = CreateWindowW(winCls, title.Get(), dwStyle, x, y, dx, dy, nullptr, nullptr, h, nullptr);
 }
 
@@ -369,23 +369,12 @@ static void ShowUsage() {
     MessageBoxW(nullptr, msg, caption, MB_OK | MB_ICONINFORMATION);
 }
 
-#if 0
-static WCHAR* GetInstallationDir() {
-    WCHAR* dir = GetExistingInstallationDir();
-    if (dir) {
-        return dir;
-    }
-    // fall back to the uninstaller's path
-    auto exePath = GetExePathTemp();
-    return path::GetDir(exePath);
-}
-#endif
-
 static LRESULT CALLBACK WndProcUninstallerFrame(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     bool handled;
 
     LRESULT res = 0;
-    if (HandleRegisteredMessages(hwnd, msg, wp, lp, res)) {
+    res = TryReflectMessages(hwnd, msg, wp, lp);
+    if (res != 0) {
         return res;
     }
 
@@ -412,7 +401,7 @@ static LRESULT CALLBACK WndProcUninstallerFrame(HWND hwnd, UINT msg, WPARAM wp, 
             return TRUE;
 
         case WM_PAINT:
-            OnPaintFrame(hwnd);
+            OnPaintFrame(hwnd, false);
             break;
 
         case WM_COMMAND:
@@ -439,7 +428,7 @@ static LRESULT CALLBACK WndProcUninstallerFrame(HWND hwnd, UINT msg, WPARAM wp, 
 static bool RegisterWinClass() {
     WNDCLASSEX wcex{};
 
-    FillWndClassEx(wcex, INSTALLER_FRAME_CLASS_NAME, WndProcUninstallerFrame);
+    FillWndClassEx(wcex, kInstallerWindowClassName, WndProcUninstallerFrame);
     auto h = GetModuleHandle(nullptr);
     WCHAR* iconName = MAKEINTRESOURCEW(GetAppIconID());
     wcex.hIcon = LoadIconW(h, iconName);
@@ -499,26 +488,8 @@ static int RunApp() {
     }
 }
 
-static char* PickUnInstallerLogPath() {
-    TempWstr dir = GetSpecialFolderTemp(CSIDL_LOCAL_APPDATA, true);
-    if (!dir.Get()) {
-        return nullptr;
-    }
-    auto dirA = ToUtf8Temp(dir.AsView());
-    return path::Join(dirA, "sumatra-uninstall-log.txt", nullptr);
-}
-
-static void StartUnInstallerLogging() {
-    char* dir = PickUnInstallerLogPath();
-    if (!dir) {
-        return;
-    }
-    StartLogToFile(dir);
-    free(dir);
-}
-
 static WCHAR* GetUninstallerPathInTemp() {
-    WCHAR tempDir[MAX_PATH + 14] = {0};
+    WCHAR tempDir[MAX_PATH + 14]{};
     DWORD res = ::GetTempPathW(dimof(tempDir), tempDir);
     CrashAlwaysIf(res == 0 || res >= dimof(tempDir));
     return path::Join(tempDir, L"Sumatra-Uninstaller.exe");
@@ -527,6 +498,7 @@ static WCHAR* GetUninstallerPathInTemp() {
 // to be able to delete installation directory we must copy
 // ourselves to temp directory and re-launch
 static void RelaunchElevatedFromTempDirectory(Flags* cli) {
+    log("RelaunchElevatedFromTempDirectory()\n");
     if (gIsDebugBuild) {
         // for easier debugging, debug build doesn't need
         // to be copied / re-launched
@@ -537,15 +509,15 @@ static void RelaunchElevatedFromTempDirectory(Flags* cli) {
     auto ownPath = GetExePathTemp();
     if (str::EqI(installerTempPath, ownPath)) {
         if (IsProcessRunningElevated()) {
-            log("Already running elevated and from temp dir\n");
+            log("  already running elevated and from temp dir\n");
             return;
         }
     }
 
-    logf(L"must copy installer '%s' to '%s'\n", ownPath.Get(), installerTempPath.Get());
+    logf(L"  copying installer '%s' to '%s'\n", ownPath.Get(), installerTempPath.Get());
     bool ok = file::Copy(installerTempPath, ownPath, false);
     if (!ok) {
-        logf("failed to copy installer\n");
+        logf("  failed to copy installer\n");
         return;
     }
 
@@ -559,13 +531,13 @@ static void RelaunchElevatedFromTempDirectory(Flags* cli) {
     if (cli->log) {
         cmdLine.Append(L" -log");
     }
-    logf(L"Re-launching '%s' with args '%s' as elevated\n", installerTempPath.Get(), cmdLine.Get());
+    logf(L"  re-launching '%s' with args '%s' as elevated\n", installerTempPath.Get(), cmdLine.Get());
     LaunchElevated(installerTempPath, cmdLine.Get());
     ::ExitProcess(0);
 }
 
 static WCHAR* GetSelfDeleteBatchPathInTemp() {
-    WCHAR tempDir[MAX_PATH + 14] = {0};
+    WCHAR tempDir[MAX_PATH + 14]{};
     DWORD res = ::GetTempPathW(dimof(tempDir), tempDir);
     CrashAlwaysIf(res == 0 || res >= dimof(tempDir));
     return path::Join(tempDir, L"sumatra-self-del.bat");
@@ -574,6 +546,7 @@ static WCHAR* GetSelfDeleteBatchPathInTemp() {
 // a hack to allow deleting our own executable
 // we create a bash script that deletes us
 static void InitSelfDelete() {
+    log("InitSelfDelete()\n");
     auto exePath = GetExePathTemp();
     auto exePathA = ToUtf8Temp(exePath.AsView());
     str::Str script;
@@ -601,17 +574,23 @@ static void InitSelfDelete() {
 }
 
 int RunUninstaller() {
-    InitInstallerUninstaller();
+    const char* uninstallerLogPath = nullptr;
+    trans::SetCurrentLangByCode(trans::DetectUserLang());
 
     if (gCli->log) {
-        StartUnInstallerLogging();
+        // same as installer
+        uninstallerLogPath = GetInstallerLogPath();
+        if (uninstallerLogPath) {
+            StartLogToFile(uninstallerLogPath, false);
+        }
+        logf("------------- Starting SumatraPDF uninstallation\n");
     }
-    log("RunUninstaller()\n");
+
     // TODO: remove dependency on this in the uninstaller
     gCli->installDir = GetExistingInstallationDir();
     WCHAR* cmdLine = GetCommandLineW();
     WCHAR* exePath = GetExePathTemp();
-    logf(L"Starting uninstaller '%s' with args '%s' for '%s'\n", exePath, cmdLine, gCli->installDir);
+    logf(L"Running uninstaller '%s' with args '%s' for '%s'\n", exePath, cmdLine, gCli->installDir);
 
     int ret = 1;
     auto installerExists = file::Exists(exePath);
@@ -676,6 +655,8 @@ int RunUninstaller() {
         RegisterPreviewer(true);
     }
     InitSelfDelete();
+    ShowLogFile(uninstallerLogPath);
+
 Exit:
     free(firstError);
     return ret;

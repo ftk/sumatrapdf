@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 #include "utils/BaseUtil.h"
@@ -9,8 +9,9 @@
 #include "utils/GuessFileType.h"
 #include "utils/WinUtil.h"
 
+#include "wingui/UIModels.h"
+
 #include "Annotation.h"
-#include "wingui/TreeModel.h"
 #include "DisplayMode.h"
 #include "Controller.h"
 #include "EngineBase.h"
@@ -112,7 +113,7 @@ class ScopedFile {
 
 #if 0
 static Rect ExtractDSCPageSize(const WCHAR* path) {
-    char header[1024] = {0};
+    char header[1024]{};
     file::ReadN(path, header, sizeof(header) - 1);
     if (!str::StartsWith((char*)header, "%!PS-Adobe-")) {
         return {};

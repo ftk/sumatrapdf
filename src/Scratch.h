@@ -1,10 +1,10 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 struct FileData {
-    char* name{nullptr};
+    char* name = nullptr;
     ByteSlice data{};
-    int imageNo{0}; // counting from 1
+    int imageNo = 0; // counting from 1
 
     FileData() = default;
     ~FileData() {

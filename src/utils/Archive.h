@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 extern "C" {
@@ -13,14 +13,14 @@ class MultiFormatArchive {
     enum class Format { Zip, Rar, SevenZip, Tar };
 
     struct FileInfo {
-        size_t fileId{0};
+        size_t fileId = 0;
         std::string_view name{};
-        i64 fileTime{0}; // this is typedef'ed as time64_t in unrar.h
-        size_t fileSizeUncompressed{0};
+        i64 fileTime = 0; // this is typedef'ed as time64_t in unrar.h
+        size_t fileSizeUncompressed = 0;
 
         // internal use
-        i64 filePos{0};
-        char* data{nullptr};
+        i64 filePos = 0;
+        char* data = nullptr;
 
         [[nodiscard]] FILETIME GetWinFileTime() const;
     };
@@ -43,7 +43,7 @@ class MultiFormatArchive {
     std::string_view GetComment();
 
     // if true, will load and uncompress all files on open
-    bool loadOnOpen{false};
+    bool loadOnOpen = false;
 
   protected:
     // used for allocating strings that are referenced by ArchFileInfo::name

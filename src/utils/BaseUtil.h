@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 #ifndef BaseUtil_h
@@ -254,12 +254,12 @@ inline void CrashIfFunc(bool cond) {
         CrashIfFunc(cond);          \
     } while (0)
 
-void _submitDebugReportIfFunc(bool cond, __unused const char* condStr);
+void _uploadDebugReportIfFunc(bool cond, __unused const char* condStr);
 
 #define ReportIf(cond)                         \
     do {                                       \
         __analysis_assume(!(cond));            \
-        _submitDebugReportIfFunc(cond, #cond); \
+        _uploadDebugReportIfFunc(cond, #cond); \
     } while (0)
 
 void* AllocZero(size_t count, size_t size);
@@ -310,6 +310,8 @@ bool memeq(const void* s1, const void* s2, size_t len);
 
 size_t RoundToPowerOf2(size_t size);
 u32 MurmurHash2(const void* key, size_t len);
+u32 MurmurHashWStrI(const WCHAR*);
+u32 MurmurHashStrI(const char*);
 
 size_t RoundUp(size_t n, size_t rounding);
 int RoundUp(int n, int rounding);
@@ -393,9 +395,9 @@ struct PoolAllocator : Allocator {
         // data follows here
     };
 
-    Block* currBlock{nullptr};
-    Block* firstBlock{nullptr};
-    int nAllocs{0};
+    Block* currBlock = nullptr;
+    Block* firstBlock = nullptr;
+    int nAllocs = 0;
     CRITICAL_SECTION cs;
 
     PoolAllocator();
@@ -576,10 +578,10 @@ defer { instance->Release(); };
 
 #include "GeomUtil.h"
 #include "StrSlice.h"
+#include "Vec.h"
 #include "StrUtil.h"
 #include "StrconvUtil.h"
 #include "Scoped.h"
-#include "Vec.h"
 #include "StringViewUtil.h"
 #include "ColorUtil.h"
 #include "TempAllocator.h"

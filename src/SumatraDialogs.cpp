@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 #include "utils/BaseUtil.h"
@@ -90,6 +90,7 @@ static INT_PTR CALLBACK Dialog_GetPassword_Proc(HWND hDlg, UINT msg, WPARAM wp, 
 
         CenterDialog(hDlg);
         SetFocus(GetDlgItem(hDlg, IDC_GET_PASSWORD_EDIT));
+        BringWindowToTop(hDlg);
         return FALSE;
     }
     //] ACCESSKEY_GROUP Password Dialog
@@ -162,7 +163,7 @@ static INT_PTR CALLBACK Dialog_GoToPage_Proc(HWND hDlg, UINT msg, WPARAM wp, LPA
         AutoFreeWstr totalCount(str::Format(_TR("(of %d)"), data->pageCount));
         SetDlgItemText(hDlg, IDC_GOTO_PAGE_LABEL_OF, totalCount);
 
-        Edit_SelectAll(editPageNo);
+        EditSelectAll(editPageNo);
         SetDlgItemText(hDlg, IDC_STATIC, _TR("&Go to page:"));
         SetDlgItemText(hDlg, IDOK, _TR("Go to page"));
         SetDlgItemText(hDlg, IDCANCEL, _TR("Cancel"));
@@ -246,7 +247,7 @@ static INT_PTR CALLBACK Dialog_Find_Proc(HWND hDlg, UINT msg, WPARAM wp, LPARAM 
             CheckDlgButton(hDlg, IDC_MATCH_CASE, data->matchCase ? BST_CHECKED : BST_UNCHECKED);
             data->editWndProc = (WNDPROC)SetWindowLongPtr(GetDlgItem(hDlg, IDC_FIND_EDIT), GWLP_WNDPROC,
                                                           (LONG_PTR)Dialog_Find_Edit_Proc);
-            Edit_SelectAll(GetDlgItem(hDlg, IDC_FIND_EDIT));
+            EditSelectAll(GetDlgItem(hDlg, IDC_FIND_EDIT));
 
             CenterDialog(hDlg);
             SetFocus(GetDlgItem(hDlg, IDC_FIND_EDIT));
@@ -623,13 +624,6 @@ static INT_PTR CALLBACK Dialog_Settings_Proc(HWND hDlg, UINT msg, WPARAM wp, LPA
             CheckDlgButton(hDlg, IDC_CHECK_FOR_UPDATES, prefs->checkForUpdates ? BST_CHECKED : BST_UNCHECKED);
             EnableWindow(GetDlgItem(hDlg, IDC_CHECK_FOR_UPDATES), HasPermission(Perm::InternetAccess));
             CheckDlgButton(hDlg, IDC_REMEMBER_OPENED_FILES, prefs->rememberOpenedFiles ? BST_CHECKED : BST_UNCHECKED);
-            if (IsExeAssociatedWithPdfExtension()) {
-                SetDlgItemText(hDlg, IDC_SET_DEFAULT_READER, _TR("SumatraPDF is your default PDF reader"));
-                EnableWindow(GetDlgItem(hDlg, IDC_SET_DEFAULT_READER), FALSE);
-            } else {
-                SetDlgItemText(hDlg, IDC_SET_DEFAULT_READER, _TR("Make SumatraPDF my default PDF reader"));
-                EnableWindow(GetDlgItem(hDlg, IDC_SET_DEFAULT_READER), HasPermission(Perm::RegistryAccess));
-            }
 
             win::SetText(hDlg, _TR("SumatraPDF Options"));
             SetDlgItemText(hDlg, IDC_SECTION_VIEW, _TR("View"));
@@ -716,21 +710,6 @@ static INT_PTR CALLBACK Dialog_Settings_Proc(HWND hDlg, UINT msg, WPARAM wp, LPA
                 case IDC_REMEMBER_STATE_PER_DOCUMENT:
                 case IDC_CHECK_FOR_UPDATES:
                     return TRUE;
-
-                case IDC_SET_DEFAULT_READER:
-                    if (!HasPermission(Perm::RegistryAccess)) {
-                        return TRUE;
-                    }
-                    AssociateExeWithPdfExtension();
-                    if (IsExeAssociatedWithPdfExtension()) {
-                        SetDlgItemText(hDlg, IDC_SET_DEFAULT_READER, _TR("SumatraPDF is your default PDF reader"));
-                        EnableWindow(GetDlgItem(hDlg, IDC_SET_DEFAULT_READER), FALSE);
-                        SendMessageW(hDlg, WM_NEXTDLGCTL, (WPARAM)GetDlgItem(hDlg, IDOK), TRUE);
-                    } else {
-                        SetDlgItemText(hDlg, IDC_SET_DEFAULT_READER,
-                                       _TR("SumatraPDF should now be your default PDF reader"));
-                    }
-                    return TRUE;
             }
             break;
     }
@@ -814,7 +793,7 @@ static INT_PTR CALLBACK Sheet_Print_Advanced_Proc(HWND hDlg, UINT msg, WPARAM wp
 }
 
 HPROPSHEETPAGE CreatePrintAdvancedPropSheet(Print_Advanced_Data* data, ScopedMem<DLGTEMPLATE>& dlgTemplate) {
-    PROPSHEETPAGE psp = {0};
+    PROPSHEETPAGE psp{};
 
     psp.dwSize = sizeof(PROPSHEETPAGE);
     psp.dwFlags = PSP_USETITLE | PSP_PREMATURE;
@@ -848,7 +827,7 @@ static INT_PTR CALLBACK Dialog_AddFav_Proc(HWND hDlg, UINT msg, WPARAM wp, LPARA
         SetDlgItemText(hDlg, IDCANCEL, _TR("Cancel"));
         if (data->favName) {
             SetDlgItemText(hDlg, IDC_FAV_NAME_EDIT, data->favName);
-            Edit_SelectAll(GetDlgItem(hDlg, IDC_FAV_NAME_EDIT));
+            EditSelectAll(GetDlgItem(hDlg, IDC_FAV_NAME_EDIT));
         }
         CenterDialog(hDlg);
         SetFocus(GetDlgItem(hDlg, IDC_FAV_NAME_EDIT));

@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
 License: Simplified BSD (see COPYING.BSD) */
 
 #include "utils/BaseUtil.h"
@@ -173,7 +173,7 @@ HRESULT ExtendFrameIntoClientArea(HWND hwnd, const MARGINS* pMarInset) {
     return DynDwmExtendFrameIntoClientArea(hwnd, pMarInset);
 }
 
-BOOL DefWindowProc_(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, LRESULT* plResult) {
+BOOL DefaultWindowProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, LRESULT* plResult) {
     if (!DynDwmDefWindowProc) {
         return FALSE;
     }
@@ -195,9 +195,9 @@ static const char* dllsToPreload =
 // be loaded indirectly
 void NoDllHijacking() {
     const char* dll = dllsToPreload;
-    while (*dll) {
+    while (dll) {
         SafeLoadLibrary(dll);
-        dll = seqstrings::SkipStr(dll);
+        seqstrings::Next(dll);
     }
 }
 
@@ -210,7 +210,7 @@ void PrioritizeSystemDirectoriesForDllLoad() {
         return;
     }
     // Only supported since Win 10
-    PROCESS_MITIGATION_IMAGE_LOAD_POLICY m = {0};
+    PROCESS_MITIGATION_IMAGE_LOAD_POLICY m{};
     m.PreferSystem32Images = 1;
     DynSetProcessMitigationPolicy(ProcessImageLoadPolicy, &m, sizeof(m));
     DbgOutLastError();

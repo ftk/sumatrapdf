@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 #define CANVAS_CLASS_NAME L"SUMATRA_PDF_CANVAS"
@@ -14,8 +14,8 @@
 #endif
 
 // scrolls half a page down/up (needed for Shift+Up/Down)
-#define SB_HPAGEUP (WM_USER + 102)
-#define SB_HPAGEDOWN (WM_USER + 103)
+#define SB_HALF_PAGEUP (WM_USER + 102)
+#define SB_HALF_PAGEDOWN (WM_USER + 103)
 
 constexpr int kHideCursorTimerID = 3;
 constexpr int kHideCursorDelayInMs = 3000;
@@ -79,7 +79,6 @@ class RenderCache;
 struct TabInfo;
 struct LabelWithCloseWnd;
 struct SessionData;
-struct DropDownCtrl;
 struct Flags;
 
 // all defined in SumatraPDF.cpp
@@ -97,6 +96,7 @@ extern bool gSuppressAltKey;
 extern HBITMAP gBitmapReloadingCue;
 extern HCURSOR gCursorDrag;
 extern bool gCrashOnOpen;
+extern HWND gLastActiveFrameHwnd;
 
 #define gPluginMode (gPluginURL != nullptr)
 
@@ -106,7 +106,7 @@ bool HasPermission(Perm permission);
 bool IsUIRightToLeft();
 bool SumatraLaunchBrowser(const WCHAR* url);
 bool OpenFileExternally(const WCHAR* path);
-void AssociateExeWithPdfExtension();
+//void AssociateExeWithPdfExtension(bool forAllUsers);
 void CloseCurrentTab(WindowInfo* win, bool quitIfLast = false);
 bool CanCloseWindow(WindowInfo* win);
 void CloseWindow(WindowInfo* win, bool quitIfLast, bool forceClose);
@@ -118,14 +118,15 @@ void SetCurrentLanguageAndRefreshUI(const char* langCode);
 void UpdateDocumentColors();
 void UpdateFixedPageScrollbarsVisibility();
 void UpdateTabFileDisplayStateForTab(TabInfo* tab);
-bool FrameOnKeydown(WindowInfo* win, WPARAM key, LPARAM lp, bool inTextfield = false);
 void ReloadDocument(WindowInfo* win, bool autoRefresh);
-void OnMenuViewFullscreen(WindowInfo* win, bool presentation = false);
+void ToggleFullScreen(WindowInfo* win, bool presentation = false);
 void RelayoutWindow(WindowInfo* win);
 
 // note: background tabs are only searched if focusTab is true
 WindowInfo* FindWindowInfoByFile(const WCHAR* file, bool focusTab);
 WindowInfo* FindWindowInfoBySyncFile(const WCHAR* file, bool focusTab);
+TabInfo* FindTabByFile(const WCHAR* file);
+void SelectTabInWindow(TabInfo*);
 
 class EngineBase;
 
@@ -148,24 +149,24 @@ struct LoadArgs {
     }
 
     // we don't own those values
-    EngineBase* engine{nullptr};
-    const WCHAR* fileName{nullptr};
-    WindowInfo* win{nullptr};
+    EngineBase* engine = nullptr;
+    const WCHAR* fileName = nullptr;
+    WindowInfo* win = nullptr;
 
-    const WCHAR* fileNameToFree{nullptr};
+    const WCHAR* fileNameToFree = nullptr;
 
-    bool showWin{true};
-    bool forceReuse{false};
+    bool showWin = true;
+    bool forceReuse = false;
     // over-writes placeWindow and other flags and forces no changing
     // of window location after loading
-    bool noPlaceWindow{false};
+    bool noPlaceWindow = false;
 
     // for internal use
-    bool isNewWindow{false};
-    bool placeWindow{true};
+    bool isNewWindow = false;
+    bool placeWindow = true;
     // TODO: this is hacky. I save prefs too frequently. Need to go over
     // and rationalize all prefs::Save() calls
-    bool noSavePrefs{false};
+    bool noSavePrefs = false;
 };
 
 WindowInfo* LoadDocument(LoadArgs& args);

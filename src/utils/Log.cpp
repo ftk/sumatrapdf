@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 #include "utils/BaseUtil.h"
@@ -64,9 +64,9 @@ static void logToPipe(std::string_view sv) {
         return;
     }
 
-    DWORD cbWritten{0};
-    BOOL ok{false};
-    bool didConnect{false};
+    DWORD cbWritten = 0;
+    BOOL ok = false;
+    bool didConnect = false;
     if (!IsValidHandle(hLogPipe)) {
         // try open pipe for logging
         hLogPipe = CreateFileW(kPipeName, GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
@@ -101,7 +101,7 @@ static void logToPipe(std::string_view sv) {
 #if 0
         DWORD err = GetLastError();
         OutputDebugStringA("logPipe: WriteFile() failed with error: ");
-        char buf[256]{0};
+        char buf[256]{};
         snprintf(buf, sizeof(buf) - 1, "%d %s\n", (int)err, getWinError(err));
         OutputDebugStringA(buf);
 #endif
@@ -179,9 +179,11 @@ void logf(const char* fmt, ...) {
     va_end(args);
 }
 
-void StartLogToFile(const char* path) {
+void StartLogToFile(const char* path, bool removeIfExists) {
     logFilePath = str::Dup(path);
-    remove(path);
+    if (removeIfExists) {
+        remove(path);
+    }
 }
 
 void log(const WCHAR* s) {

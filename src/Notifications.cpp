@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 #include "utils/BaseUtil.h"
@@ -12,6 +12,9 @@
 using Gdiplus::Graphics;
 using Gdiplus::Pen;
 using Gdiplus::SolidBrush;
+
+Kind NG_CURSOR_POS_HELPER = "cursorPosHelper";
+Kind NG_RESPONSE_TO_ACTION = "responseToAction";
 
 extern bool IsUIRightToLeft(); // SumatraPDF.h
 
@@ -101,7 +104,7 @@ static void UpdateWindowPosition(NotificationWnd* wnd, const WCHAR* message, boo
 bool NotificationWnd::Create(const WCHAR* msg, const WCHAR* progressMsg) {
     static ATOM atom = 0;
     if (atom == 0) {
-        WNDCLASSEX wcex = {};
+        WNDCLASSEX wcex{};
         FillWndClassEx(wcex, kNotificationsWndClassName, NotificationWndProc);
         wcex.style = 0; // no CS_HREDRAW | CS_VREDRAW
         wcex.hCursor = LoadCursor(nullptr, IDC_APPSTARTING);
@@ -115,7 +118,7 @@ bool NotificationWnd::Create(const WCHAR* msg, const WCHAR* progressMsg) {
         this->progressMsg = str::Dup(progressMsg);
     }
 
-    NONCLIENTMETRICS ncm = {};
+    NONCLIENTMETRICS ncm{};
     ncm.cbSize = sizeof(ncm);
     SystemParametersInfo(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, 0);
     this->font = CreateFontIndirect(&ncm.lfMessageFont);
@@ -390,6 +393,26 @@ void Notifications::Relayout() {
         uint flags = SWP_NOSIZE | SWP_NOZORDER;
         SetWindowPos(wnd->hwnd, nullptr, rect.x, rect.y, 0, 0, flags);
     }
+}
+
+NotificationWnd* Notifications::Show(HWND hwnd, const WCHAR* msg, NotificationOptions opts, Kind groupId) {
+    int timeoutMS = ((uint)opts & (uint)NotificationOptions::Persist) ? 0 : 3000;
+    bool highlight = ((uint)opts & (uint)NotificationOptions::Highlight);
+
+    NotificationWnd* wnd = new NotificationWnd(hwnd, timeoutMS);
+    wnd->highlight = highlight;
+    wnd->wndRemovedCb = [this](NotificationWnd* wnd) { RemoveNotification(wnd); };
+    if (NG_CURSOR_POS_HELPER == groupId) {
+        wnd->shrinkLimit = 0.7f;
+    }
+    wnd->Create(msg, nullptr);
+    Add(wnd, groupId);
+    return wnd;
+}
+
+NotificationWnd* Notifications::Show(HWND hwnd, std::string_view sv, NotificationOptions opts, Kind groupId) {
+    auto msg = ToWstrTemp(sv);
+    return Show(hwnd, msg.Get(), opts, groupId);
 }
 
 void NotificationWnd::UpdateProgress(int current, int total) {

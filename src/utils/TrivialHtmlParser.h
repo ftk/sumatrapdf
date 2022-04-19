@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 enum HtmlParseError {
@@ -38,18 +38,18 @@ class HtmlParser {
     PoolAllocator allocator;
 
     // text to parse. It can be changed.
-    char* html{nullptr};
+    char* html = nullptr;
     // true if s was allocated by ourselves, false if managed
     // by the caller
-    bool freeHtml{false};
+    bool freeHtml = false;
     // the codepage used for converting text to Unicode
     uint codepage{CP_ACP};
 
-    size_t elementsCount{0};
-    size_t attributesCount{0};
+    size_t elementsCount = 0;
+    size_t attributesCount = 0;
 
-    HtmlElement* rootElement{nullptr};
-    HtmlElement* currElement{nullptr};
+    HtmlElement* rootElement = nullptr;
+    HtmlElement* currElement = nullptr;
 
     HtmlElement* AllocElement(HtmlTag tag, char* name, HtmlElement* parent);
     HtmlAttr* AllocAttr(char* name, HtmlAttr* next);
@@ -68,7 +68,7 @@ class HtmlParser {
 
   public:
     HtmlParseError error{ErrParsingNoError}; // parsing error, a static string
-    const char* errorContext{nullptr};       // pointer within html showing which part we failed to parse
+    const char* errorContext = nullptr;      // pointer within html showing which part we failed to parse
 
     HtmlParser();
     ~HtmlParser();

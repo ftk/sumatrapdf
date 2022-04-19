@@ -1,7 +1,9 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 enum class TextSearchDirection : bool { Backward = false, Forward = true };
+
+struct ProgressUpdateUI;
 
 class TextSearch : public TextSelection {
   public:

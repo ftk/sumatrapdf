@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 #include "utils/BaseUtil.h"
@@ -10,10 +10,10 @@
 #include "utils/UITask.h"
 #include "utils/WinUtil.h"
 
-#include "wingui/WinGui.h"
+#include "wingui/UIModels.h"
+
 #include "wingui/Layout.h"
 #include "wingui/Window.h"
-#include "wingui/TreeModel.h"
 #include "wingui/TreeCtrl.h"
 #include "wingui/TabsCtrl.h"
 
@@ -25,8 +25,6 @@
 #include "AppColors.h"
 #include "DisplayModel.h"
 #include "GlobalPrefs.h"
-#include "ProgressUpdateUI.h"
-#include "Notifications.h"
 #include "SumatraPDF.h"
 #include "WindowInfo.h"
 #include "TabInfo.h"
@@ -103,20 +101,20 @@ static inline Size GetTabSize(HWND hwnd) {
 }
 
 struct TabPainter {
-    TabsCtrl2* tabsCtrl{nullptr};
-    PathData* data{nullptr};
-    int width{-1};
-    int height{-1};
-    HWND hwnd{nullptr};
+    TabsCtrl2* tabsCtrl = nullptr;
+    PathData* data = nullptr;
+    int width = -1;
+    int height = -1;
+    HWND hwnd = nullptr;
 
-    int selectedTabIdx{-1};
-    int highlighted{-1};
-    int xClicked{-1};
-    int xHighlighted{-1};
-    int nextTab{-1};
-    bool isDragging{false};
-    bool inTitlebar{false};
-    LPARAM mouseCoordinates{0};
+    int selectedTabIdx = -1;
+    int highlighted = -1;
+    int xClicked = -1;
+    int xHighlighted = -1;
+    int nextTab = -1;
+    bool isDragging = false;
+    bool inTitlebar = false;
+    LPARAM mouseCoordinates = 0;
     COLORREF currBgCol{DEFAULT_CURRENT_BG_COL};
 
     TabPainter(TabsCtrl2* ctrl, Size tabSize);
@@ -651,10 +649,10 @@ static LRESULT CALLBACK TabBarProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, __
 }
 
 void CreateTabbar(WindowInfo* win) {
-    TabsCtrl2* tabsCtrl = new TabsCtrl2(win->hwndFrame);
+    TabsCtrl2* tabsCtrl = new TabsCtrl2();
     tabsCtrl->ctrlID = IDC_TABBAR;
     tabsCtrl->createToolTipsHwnd = true;
-    tabsCtrl->Create();
+    tabsCtrl->Create(win->hwndFrame);
 
     HWND hwndTabBar = tabsCtrl->hwnd;
     SetWindowSubclass(hwndTabBar, TabBarProc, 0, (DWORD_PTR)win);
@@ -887,7 +885,7 @@ void SetTabsInTitlebar(WindowInfo* win, bool inTitlebar) {
         RelayoutCaption(win);
     } else if (dwm::IsCompositionEnabled()) {
         // remove the extended frame
-        MARGINS margins = {0};
+        MARGINS margins{};
         dwm::ExtendFrameIntoClientArea(win->hwndFrame, &margins);
         win->extendedFrameHeight = 0;
     }

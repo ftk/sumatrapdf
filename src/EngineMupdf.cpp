@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 extern "C" {
@@ -20,9 +20,10 @@ extern "C" {
 #include "utils/ZipUtil.h"
 #include "utils/Timer.h"
 
+#include "wingui/UIModels.h"
+
 #include "AppColors.h"
 #include "Annotation.h"
-#include "wingui/TreeModel.h"
 #include "DisplayMode.h"
 #include "Controller.h"
 #include "EngineBase.h"
@@ -95,11 +96,11 @@ static char* FzGetURL(fz_link* link, fz_outline* outline) {
 }
 
 struct PageDestinationMupdf : IPageDestination {
-    fz_outline* outline{nullptr};
-    fz_link* link{nullptr};
+    fz_outline* outline = nullptr;
+    fz_link* link = nullptr;
 
-    WCHAR* value{nullptr};
-    WCHAR* name{nullptr};
+    WCHAR* value = nullptr;
+    WCHAR* name = nullptr;
 
     PageDestinationMupdf(fz_link* l, fz_outline* o) {
         // exactly one must be provided
@@ -438,7 +439,7 @@ static fz_stream* FzOpenIStream(fz_context* ctx, IStream* stream) {
         return nullptr;
     }
 
-    LARGE_INTEGER zero = {0};
+    LARGE_INTEGER zero{};
     HRESULT res = stream->Seek(zero, STREAM_SEEK_SET, nullptr);
     if (FAILED(res)) {
         fz_throw(ctx, FZ_ERROR_GENERIC, "IStream seek error: %x", res);
@@ -879,7 +880,7 @@ static RenderedBitmap* TryRenderAsPaletteImage(fz_pixmap* pixmap) {
     u8* dest = bmpData;
     u8* source = pixmap->samples;
     u32* palette = (u32*)bmi.Get()->bmiColors;
-    u8 grayIdxs[256] = {0};
+    u8 grayIdxs[256]{};
 
     int paletteSize = 0;
     RGBQUAD c;
@@ -1266,14 +1267,6 @@ pdf_obj* PdfCopyStrDict(fz_context* ctx, pdf_document* doc, pdf_obj* dict) {
     return copy;
 }
 
-static int PdfStreamNo(fz_context* ctx, pdf_obj* ref) {
-    pdf_document* doc = pdf_get_indirect_document(ctx, ref);
-    if (doc) {
-        return pdf_to_num(ctx, ref);
-    }
-    return 0;
-}
-
 // Note: make sure to only call with ctxAccess
 static fz_outline* PdfLoadAttachments(fz_context* ctx, pdf_document* doc) {
     pdf_obj* dict = pdf_load_name_tree(ctx, doc, PDF_NAME(EmbeddedFiles));
@@ -1281,22 +1274,20 @@ static fz_outline* PdfLoadAttachments(fz_context* ctx, pdf_document* doc) {
         return nullptr;
     }
 
-    fz_outline root = {0};
+    fz_outline root{};
     fz_outline* curr = &root;
     for (int i = 0; i < pdf_dict_len(ctx, dict); i++) {
-        pdf_obj* dest = pdf_dict_get_val(ctx, dict, i);
+        pdf_obj* fs = pdf_dict_get_val(ctx, dict, i);
 
-        int is_embedded = pdf_is_embedded_file(ctx, dest);
-        if (is_embedded == 0) {
+        if (!pdf_is_embedded_file(ctx, fs)) {
             continue;
         }
-        pdf_obj* fs = pdf_embedded_file_stream(ctx, dest);
-        int streamNo = PdfStreamNo(ctx, fs);
-        const char* nameStr = pdf_embedded_file_name(ctx, dest);
+        pdf_embedded_file_params fileParams = {};
+        pdf_get_embedded_file_params(ctx, fs, &fileParams);
+        const char* nameStr = fileParams.filename;
         if (str::IsEmpty(nameStr)) {
             continue;
         }
-        // int streamNo = pdf_to_num(ctx, embedded);
         fz_outline* link = fz_new_outline(ctx);
         link->title = fz_strdup(ctx, nameStr);
         link->uri = fz_strdup(ctx, nameStr); // TODO: maybe make file:// ?
@@ -1923,7 +1914,7 @@ bool EngineMupdf::LoadFromStream(fz_stream* stm, const char* nameHint, PasswordU
     }
 
     // TODO: make this work for non-PDF formats?
-    u8 digest[16 + 32] = {0};
+    u8 digest[16 + 32]{};
     if (pdfdoc) {
         FzStreamFingerprint(ctx, pdfdoc->file, digest);
     }
@@ -2127,6 +2118,46 @@ bool EngineMupdf::FinishLoading() {
         return false;
     }
 
+    if (!loadPageTreeFailed) {
+        // this does the job of pdf_bound_page but without doing pdf_load_page()
+        pdf_rev_page_map* map = pdfdoc->rev_page_map;
+        for (int i = 0; i < nPages && !loadPageTreeFailed; i++) {
+            int pageNo = map[i].page;
+            if (pageNo >= nPages) {
+                // corrupted file
+                loadPageTreeFailed = true;
+                continue;
+            }
+            int objNo = map[i].object;
+            fz_rect mbox{};
+            fz_matrix page_ctm{};
+            pdf_obj* pageref = nullptr;
+            fz_var(pageref);
+            fz_var(mbox);
+            fz_try(ctx) {
+                pageref = pdf_load_object(ctx, pdfdoc, objNo);
+                pdf_page_obj_transform(ctx, pageref, &mbox, &page_ctm);
+                mbox = fz_transform_rect(mbox, page_ctm);
+                pdf_drop_obj(ctx, pageref);
+            }
+            fz_catch(ctx) {
+                loadPageTreeFailed = true;
+                mbox = {};
+            }
+            if (fz_is_empty_rect(mbox)) {
+                fz_warn(ctx, "cannot find page size for page %d", i);
+                mbox.x0 = 0;
+                mbox.y0 = 0;
+                mbox.x1 = 612;
+                mbox.y1 = 792;
+                loadPageTreeFailed = true;
+            }
+            FzPageInfo* pageInfo = pages[pageNo];
+            pageInfo->mediabox = ToRectF(mbox);
+            pageInfo->pageNo = pageNo + 1;
+        }
+    }
+
     if (loadPageTreeFailed) {
         for (int pageNo = 0; pageNo < nPages; pageNo++) {
             FzPageInfo* pageInfo = pages[pageNo];
@@ -2152,37 +2183,6 @@ bool EngineMupdf::FinishLoading() {
                 mbox.y1 = 792;
             }
             pageInfo->mediabox = ToRectF(mbox);
-        }
-    } else {
-        // this does the job of pdf_bound_page but without doing pdf_load_page()
-        pdf_rev_page_map* map = pdfdoc->rev_page_map;
-        for (int i = 0; i < nPages; i++) {
-            int pageNo = map[i].page;
-            int objNo = map[i].object;
-            fz_rect mbox{};
-            fz_matrix page_ctm{};
-            pdf_obj* pageref = nullptr;
-            fz_var(pageref);
-            fz_var(mbox);
-            fz_try(ctx) {
-                pageref = pdf_load_object(ctx, pdfdoc, objNo);
-                pdf_page_obj_transform(ctx, pageref, &mbox, &page_ctm);
-                mbox = fz_transform_rect(mbox, page_ctm);
-                pdf_drop_obj(ctx, pageref);
-            }
-            fz_catch(ctx) {
-                mbox = {};
-            }
-            if (fz_is_empty_rect(mbox)) {
-                fz_warn(ctx, "cannot find page size for page %d", i);
-                mbox.x0 = 0;
-                mbox.y0 = 0;
-                mbox.x1 = 612;
-                mbox.y1 = 792;
-            }
-            FzPageInfo* pageInfo = pages[pageNo];
-            pageInfo->mediabox = ToRectF(mbox);
-            pageInfo->pageNo = pageNo + 1;
         }
     }
 
@@ -2499,8 +2499,10 @@ static void MakePageElementCommentsFromAnnotations(fz_context* ctx, FzPageInfo* 
         if (PDF_ANNOT_FILE_ATTACHMENT == tp) {
             logf("found file attachment annotation\n");
 
-            pdf_obj* fs = pdf_dict_get(ctx, pdf_annot_obj(ctx, annot), PDF_NAME(FS));
-            const char* attname = pdf_embedded_file_name(ctx, fs);
+            pdf_embedded_file_params fileParams = {};
+            pdf_obj* fs = pdf_annot_obj(ctx, annot);
+            pdf_get_embedded_file_params(ctx, fs, &fileParams);
+            const char* attname = fileParams.filename;
             fz_rect rect = pdf_annot_rect(ctx, annot);
             if (str::IsEmpty(attname) || fz_is_empty_rect(rect) || !pdf_is_embedded_file(ctx, fs)) {
                 continue;
@@ -2630,7 +2632,7 @@ RectF EngineMupdf::PageContentBox(int pageNo, RenderTarget target) {
 
     ScopedCritSec scope(ctxAccess);
 
-    fz_cookie fzcookie = {};
+    fz_cookie fzcookie{};
     fz_rect rect = fz_empty_rect;
     fz_device* dev = nullptr;
     fz_display_list* list = nullptr;
@@ -3253,7 +3255,6 @@ ByteSlice EngineMupdf::GetFileData() {
     return file::ReadFile(path);
 }
 
-// TODO: proper support for includeUserAnnots or maybe just remove it
 bool EngineMupdf::SaveFileAs(const char* copyFileName) {
     auto dstPath = ToWstrTemp(copyFileName);
     AutoFree d = GetFileData();
@@ -3492,8 +3493,11 @@ bool EngineMupdfHasUnsavedAnnotations(EngineBase* engine) {
     if (!epdf->pdfdoc) {
         return false;
     }
-    int res = pdf_has_unsaved_changes(epdf->ctx, epdf->pdfdoc);
-    return res != 0;
+    // pdf_has_unsaved_changes() also returns true if the file was auto-repaired
+    // at loading time, which is not something we want
+    // int res = pdf_has_unsaved_changes(epdf->ctx, epdf->pdfdoc);
+    // return res != 0;
+    return epdf->modifiedAnnotations;
 }
 
 bool EngineMupdfSupportsAnnotations(EngineBase* engine) {
@@ -3577,6 +3581,8 @@ Annotation* MakeAnnotationPdf(EngineMupdf* engine, pdf_annot* annot, int pageNo)
         // unsupported type
         return nullptr;
     }
+
+    engine->modifiedAnnotations = true;
 
     CrashIf(pageNo < 1);
     Annotation* res = new Annotation();

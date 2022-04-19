@@ -6,7 +6,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"sync"
 	"time"
 
 	"github.com/kjk/common/u"
@@ -47,6 +46,15 @@ const (
 	cppcheckLogFile = "cppcheck.out.txt"
 )
 
+func detectCppcheckExe() string {
+	// TODO: better detection logic
+	path := `c:\Program Files\Cppcheck\cppcheck.exe`
+	if pathExists(path) {
+		return path
+	}
+	return "cppcheck.exe"
+}
+
 func runCppCheck(all bool) {
 	// -q : quiet, doesn't print progress report
 	// -v : prints more info about the error
@@ -64,7 +72,7 @@ func runCppCheck(all bool) {
 	// "-I", winSdkIncludeDir
 	// "-D__RPCNDR_H_VERSION__=440"
 
-	args := []string{"--platform=win64", "-DWIN32", "-D_WIN32", "-D_MSC_VER=1800", "-D_M_X64", "-DIFACEMETHODIMP_(x)=x", "-DSTDAPI_(x)=x", "-DPRE_RELEASE_VER=3.3", "-q", "-v"}
+	args := []string{"--platform=win64", "-DWIN32", "-D_WIN32", "-D_MSC_VER=1800", "-D_M_X64", "-DIFACEMETHODIMP_(x)=x", "-DSTDAPI_(x)=x", "-DPRE_RELEASE_VER=3.4", "-q", "-v"}
 	if all {
 		args = append(args, "--enable=style")
 		args = append(args, "--suppress=constParameter")
@@ -89,7 +97,8 @@ func runCppCheck(all bool) {
 		args = append(args, "--suppress=knownConditionTrueFalse")
 	}
 	args = append(args, "--inline-suppr", "-I", "src", "-I", "src/utils", "src")
-	cmd = exec.Command("cppcheck", args...)
+	cppcheckExe := detectCppcheckExe()
+	cmd = exec.Command(cppcheckExe, args...)
 	os.Remove(cppcheckLogFile)
 	err := runCmdShowProgressAndLog(cmd, cppcheckLogFile)
 	must(err)
@@ -109,10 +118,12 @@ func ensureSpacesCreds() {
 	panicIf(os.Getenv("SPACES_SECRET") == "", "Not uploading to do spaces because SPACES_SECRET env variable not set\n")
 }
 
-func ensureSpacesAndS3Creds() {
+func ensureAllUploadCreds() {
 	ensureSpacesCreds()
 	panicIf(os.Getenv("AWS_ACCESS") == "", "Not uploading to s3 because AWS_ACCESS env variable not set\n")
 	panicIf(os.Getenv("AWS_SECRET") == "", "Not uploading to s3 because AWS_SECRET env variable not set\n")
+	panicIf(os.Getenv("BB_ACCESS") == "", "Not uploading to backblaze because BB_ACCESS env variable not set\n")
+	panicIf(os.Getenv("BB_SECRET") == "", "Not uploading to backblaze because BB_SECRET env variable not set\n")
 }
 
 func ensureBuildOptionsPreRequesites(opts *BuildOptions) {
@@ -121,7 +132,7 @@ func ensureBuildOptionsPreRequesites(opts *BuildOptions) {
 	logf(ctx(), "verifyTranslationUpToDate: %v\n", opts.verifyTranslationUpToDate)
 
 	if opts.upload {
-		ensureSpacesAndS3Creds()
+		ensureAllUploadCreds()
 	}
 
 	if opts.sign {
@@ -177,7 +188,6 @@ func main() {
 		flgBuildRelease    bool
 		flgWc              bool
 		flgTransDownload   bool
-		flgTransCiUpdate   bool
 		flgClean           bool
 		flgCheckAccessKeys bool
 		flgTriggerCodeQL   bool
@@ -208,24 +218,28 @@ func main() {
 		flag.BoolVar(&flgClangFormat, "format", false, "format source files with clang-format")
 		flag.BoolVar(&flgWc, "wc", false, "show loc stats (like wc -l)")
 		flag.BoolVar(&flgTransDownload, "trans-dl", false, "download latest translations to src/docs/translations.txt")
-		flag.BoolVar(&flgTransCiUpdate, "ci-trans-update", false, "download and checkin latest translations to src/docs/translations.txt")
 		//flag.BoolVar(&flgGenTranslationsInfoCpp, "trans-gen-info", false, "generate src/TranslationsInfo.cpp")
 		flag.BoolVar(&flgClean, "clean", false, "clean the build (remove out/ files except for settings)")
 		flag.BoolVar(&flgCheckAccessKeys, "check-access-keys", false, "check access keys for menu items")
 		//flag.BoolVar(&flgBuildNo, "build-no", false, "print build number")
 		flag.BoolVar(&flgTriggerCodeQL, "trigger-codeql", false, "trigger codeql build")
-		//flag.BoolVar(&flgCppCheck, "cppcheck", false, "run cppcheck (must be installed)")
-		//flag.BoolVar(&flgCppCheckAll, "cppcheck-all", false, "run cppcheck with more checks (must be installed)")
+		flag.BoolVar(&flgCppCheck, "cppcheck", false, "run cppcheck (must be installed)")
+		flag.BoolVar(&flgCppCheckAll, "cppcheck-all", false, "run cppcheck with more checks (must be installed)")
 		//flag.BoolVar(&flgClangTidy, "clang-tidy", false, "run clang-tidy (must be installed)")
 		//flag.BoolVar(&flgClangTidyFix, "clang-tidy-fix", false, "run clang-tidy (must be installed)")
 		flag.BoolVar(&flgDiff, "diff", false, "preview diff using winmerge")
-		flag.BoolVar(&flgGenSettings, "settings-gen", false, "re-generate src/SettingsStructs.h")
+		flag.BoolVar(&flgGenSettings, "gen-settings", false, "re-generate src/SettingsStructs.h")
 		flag.StringVar(&flgUpdateVer, "update-auto-update-ver", "", "update version used for auto-update checks")
 		flag.BoolVar(&flgDrMem, "drmem", false, "run drmemory of rel 64")
 		flag.BoolVar(&flgLogView, "logview", false, "run logview")
 		flag.BoolVar(&flgRunTests, "run-tests", false, "run test_util executable")
 		flag.BoolVar(&flgBuildDocs, "build-docs", false, "build epub docs")
 		flag.Parse()
+	}
+
+	if false {
+		testGenUpdateTxt()
+		return
 	}
 
 	if false {
@@ -347,27 +361,6 @@ func main() {
 		return
 	}
 
-	if flgTransCiUpdate {
-		didChange := downloadTranslations()
-		if !didChange {
-			return
-		}
-		{
-			cmd := exec.Command("git", "add", filepath.Join("src", "docs", "translations.txt"))
-			cmdRunLoggedMust(cmd)
-		}
-		{
-			cmd := exec.Command("git", "commit", "-am", "update translations")
-			cmdRunLoggedMust(cmd)
-		}
-		{
-			cmd := exec.Command("git", "push")
-			cmdRunLoggedMust(cmd)
-		}
-
-		return
-	}
-
 	if flgGenTranslationsInfoCpp {
 		genTranslationInfoCpp()
 		return
@@ -442,7 +435,7 @@ func main() {
 	}
 
 	if flgUpdateVer != "" {
-		ensureSpacesAndS3Creds()
+		ensureAllUploadCreds()
 		updateAutoUpdateVer(flgUpdateVer)
 		return
 	}
@@ -479,35 +472,4 @@ func main() {
 	}
 
 	flag.Usage()
-}
-
-func uploadToStorage(opts *BuildOptions, buildType string) {
-	if !opts.upload {
-		logf(ctx(), "Skipping uploadToStorage() because opts.upload = false\n")
-		return
-	}
-
-	timeStart := time.Now()
-	defer func() {
-		logf(ctx(), "uploadToStorage of '%s' finished in %s\n", buildType, time.Since(timeStart))
-	}()
-	var wg sync.WaitGroup
-
-	wg.Add(1)
-	go func() {
-		mc := newMinioS3Client()
-		minioUploadBuildMust(mc, buildType)
-		minioDeleteOldBuildsPrefix(mc, buildTypePreRel)
-		wg.Done()
-	}()
-
-	wg.Add(1)
-	go func() {
-		mc := newMinioSpacesClient()
-		minioUploadBuildMust(mc, buildType)
-		minioDeleteOldBuildsPrefix(mc, buildTypePreRel)
-		wg.Done()
-	}()
-
-	wg.Wait()
 }

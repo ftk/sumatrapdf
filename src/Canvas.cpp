@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 #include "utils/BaseUtil.h"
@@ -10,10 +10,10 @@
 #include "utils/WinUtil.h"
 #include "utils/ScopedWin.h"
 
-#include "wingui/WinGui.h"
+#include "wingui/UIModels.h"
+
 #include "wingui/Layout.h"
 #include "wingui/Window.h"
-#include "wingui/TreeModel.h"
 #include "wingui/TreeCtrl.h"
 #include "wingui/FrameRateWnd.h"
 
@@ -32,11 +32,11 @@
 #include "ProgressUpdateUI.h"
 #include "TextSelection.h"
 #include "TextSearch.h"
-#include "Notifications.h"
 #include "SumatraConfig.h"
 #include "TabInfo.h"
 #include "SumatraPDF.h"
 #include "EditAnnotations.h"
+#include "Notifications.h"
 #include "WindowInfo.h"
 #include "resource.h"
 #include "Commands.h"
@@ -52,6 +52,14 @@
 #include "Translations.h"
 
 #include "utils/Log.h"
+
+// Timer for mouse wheel smooth scrolling
+#define MW_SMOOTHSCROLL_TIMER_ID 6
+
+// Smooth scrolling factor. This is a value between 0 and 1.
+// Each step, we scroll the needed delta times this factor.
+// Therefore, a higher factor makes smooth scrolling faster.
+static const double gSmoothScrollingFactor = 0.2;
 
 // these can be global, as the mouse wheel can't affect more than one window at once
 static int gDeltaPerLine = 0;
@@ -79,7 +87,7 @@ void UpdateDeltaPerLine() {
 static void OnVScroll(WindowInfo* win, WPARAM wp) {
     CrashIf(!win->AsFixed());
 
-    SCROLLINFO si = {0};
+    SCROLLINFO si{};
     si.cbSize = sizeof(si);
     si.fMask = SIF_ALL;
     GetScrollInfo(win->hwndCanvas, SB_VERT, &si);
@@ -106,10 +114,10 @@ static void OnVScroll(WindowInfo* win, WPARAM wp) {
         case SB_LINEDOWN:
             si.nPos += lineHeight;
             break;
-        case SB_HPAGEUP:
+        case SB_HALF_PAGEUP:
             si.nPos -= si.nPage / 2;
             break;
-        case SB_HPAGEDOWN:
+        case SB_HALF_PAGEDOWN:
             si.nPos += si.nPage / 2;
             break;
         case SB_PAGEUP:
@@ -132,14 +140,19 @@ static void OnVScroll(WindowInfo* win, WPARAM wp) {
     // If the position has changed or we're dealing with a touchpad scroll event,
     // scroll the window and update it
     if (si.nPos != currPos || msg == SB_THUMBTRACK) {
-        win->AsFixed()->ScrollYTo(si.nPos);
+        if (gGlobalPrefs->smoothScroll) {
+            win->scrollTargetY = si.nPos;
+            SetTimer(win->hwndCanvas, MW_SMOOTHSCROLL_TIMER_ID, USER_TIMER_MINIMUM, nullptr);
+        } else {
+            win->AsFixed()->ScrollYTo(si.nPos);
+        }
     }
 }
 
 static void OnHScroll(WindowInfo* win, WPARAM wp) {
     CrashIf(!win->AsFixed());
 
-    SCROLLINFO si = {0};
+    SCROLLINFO si{};
     si.cbSize = sizeof(si);
     si.fMask = SIF_ALL;
     GetScrollInfo(win->hwndCanvas, SB_HORZ, &si);
@@ -589,7 +602,7 @@ static void OnMouseLeftButtonDblClk(WindowInfo* win, int x, int y, WPARAM key) {
         return;
     }
 
-    int pageNo{-1};
+    int pageNo = -1;
     IPageElement* pageEl = dm->GetElementAtPos(Point(x, y), &pageNo);
     if (pageEl && pageEl->Is(kindPageElementDest)) {
         // speed up navigation in a file where navigation links are in a fixed position
@@ -875,6 +888,7 @@ static void DrawDocument(WindowInfo* win, HDC hdc, RECT* rcArea) {
     bool rendering = false;
     Rect screen(Point(), dm->GetViewPort().Size());
 
+    bool isRtl = IsUIRightToLeft();
     for (int pageNo = 1; pageNo <= dm->PageCount(); ++pageNo) {
         PageInfo* pageInfo = dm->GetPageInfo(pageNo);
         if (!pageInfo || 0.0f == pageInfo->visibleRatio) {
@@ -905,11 +919,11 @@ static void DrawDocument(WindowInfo* win, HDC hdc, RECT* rcArea) {
                 if (renderDelay < REPAINT_MESSAGE_DELAY_IN_MS) {
                     RepaintAsync(win, REPAINT_MESSAGE_DELAY_IN_MS / 4);
                 } else {
-                    DrawCenteredText(hdc, bounds, _TR("Please wait - rendering..."), IsUIRightToLeft());
+                    DrawCenteredText(hdc, bounds, _TR("Please wait - rendering..."), isRtl);
                 }
                 rendering = true;
             } else {
-                DrawCenteredText(hdc, bounds, _TR("Couldn't render the page"), IsUIRightToLeft());
+                DrawCenteredText(hdc, bounds, _TR("Couldn't render the page"), isRtl);
             }
             SelectObject(hdc, hPrevFont);
             continue;
@@ -992,7 +1006,7 @@ static LRESULT OnSetCursorMouseIdle(WindowInfo* win, HWND hwnd) {
         return TRUE;
     }
 
-    int pageNo{0};
+    int pageNo = {0};
     IPageElement* pageEl = dm->GetElementAtPos(pt, &pageNo);
     if (!pageEl) {
         SetTextOrArrorCursor(dm, pt);
@@ -1073,6 +1087,10 @@ static LRESULT CanvasOnMouseWheel(WindowInfo* win, UINT msg, WPARAM wp, LPARAM l
             win->dragStartPending = false;
         }
 
+        // Kill the smooth scroll timer when zooming
+        // We don't want to move to the new updated y offset after zooming
+        KillTimer(win->hwndCanvas, MW_SMOOTHSCROLL_TIMER_ID);
+
         return 0;
     }
 
@@ -1097,7 +1115,7 @@ static LRESULT CanvasOnMouseWheel(WindowInfo* win, UINT msg, WPARAM wp, LPARAM l
 
     if (gDeltaPerLine < 0 && win->AsFixed()) {
         // scroll by (fraction of a) page
-        SCROLLINFO si = {0};
+        SCROLLINFO si{};
         si.cbSize = sizeof(si);
         si.fMask = SIF_PAGE;
         GetScrollInfo(win->hwndCanvas, horizontal ? SB_HORZ : SB_VERT, &si);
@@ -1113,7 +1131,7 @@ static LRESULT CanvasOnMouseWheel(WindowInfo* win, UINT msg, WPARAM wp, LPARAM l
     // alt while scrolling will scroll by half a page per tick
     // usefull for browsing long files
     if ((LOWORD(wp) & MK_ALT) || IsAltPressed()) {
-        SendMessageW(win->hwndCanvas, WM_VSCROLL, (delta > 0) ? SB_HPAGEUP : SB_HPAGEDOWN, 0);
+        SendMessageW(win->hwndCanvas, WM_VSCROLL, (delta > 0) ? SB_HALF_PAGEUP : SB_HALF_PAGEDOWN, 0);
         return 0;
     }
 
@@ -1122,7 +1140,7 @@ static LRESULT CanvasOnMouseWheel(WindowInfo* win, UINT msg, WPARAM wp, LPARAM l
         Point pt;
         GetCursorPosInHwnd(win->hwndCanvas, pt);
         if (pt.x > win->canvasRc.dx) {
-            SendMessageW(win->hwndCanvas, WM_VSCROLL, (delta > 0) ? SB_HPAGEUP : SB_HPAGEDOWN, 0);
+            SendMessageW(win->hwndCanvas, WM_VSCROLL, (delta > 0) ? SB_HALF_PAGEUP : SB_HALF_PAGEDOWN, 0);
             return 0;
         }
     }
@@ -1197,7 +1215,7 @@ static LRESULT OnGesture(WindowInfo* win, UINT msg, WPARAM wp, LPARAM lp) {
     }
 
     HGESTUREINFO hgi = (HGESTUREINFO)lp;
-    GESTUREINFO gi = {0};
+    GESTUREINFO gi{};
     gi.cbSize = sizeof(GESTUREINFO);
 
     BOOL ok = touch::GetGestureInfo(hgi, &gi);
@@ -1272,7 +1290,7 @@ static LRESULT OnGesture(WindowInfo* win, UINT msg, WPARAM wp, LPARAM lp) {
 
         case GID_TWOFINGERTAP:
             // Two-finger tap toggles fullscreen mode
-            OnMenuViewFullscreen(win);
+            ToggleFullScreen(win);
             break;
 
         case GID_PRESSANDTAP:
@@ -1516,15 +1534,34 @@ static void OnTimer(WindowInfo* win, HWND hwnd, WPARAM timerId) {
                 ReloadDocument(win, true);
             }
             break;
+
+        case MW_SMOOTHSCROLL_TIMER_ID:
+            DisplayModel* dm = win->AsFixed();
+
+            int current = dm->yOffset();
+            int target = win->scrollTargetY;
+            int delta = target - current;
+
+            if (delta == 0) {
+                KillTimer(hwnd, MW_SMOOTHSCROLL_TIMER_ID);
+            } else {
+                // logf("Smooth scrolling from %d to %d (delta %d)\n", current, target, delta);
+
+                double step = delta * gSmoothScrollingFactor;
+
+                // Round away from zero
+                int dy = step < 0 ? (int)floor(step) : (int)ceil(step);
+                dm->ScrollYTo(current + dy);
+            }
+            break;
     }
 }
 
-static void OnDropFiles(HDROP hDrop, bool dragFinish) {
-    WCHAR filePath[MAX_PATH] = {0};
+static void OnDropFiles(WindowInfo* win, HDROP hDrop, bool dragFinish) {
+    WCHAR filePath[MAX_PATH]{};
     int nFiles = DragQueryFile(hDrop, DRAGQUERY_NUMFILES, nullptr, 0);
 
     bool isShift = IsShiftPressed();
-    WindowInfo* win = nullptr;
     for (int i = 0; i < nFiles; i++) {
         DragQueryFile(hDrop, i, filePath, dimof(filePath));
         if (str::EndsWithI(filePath, L".lnk")) {
@@ -1534,7 +1571,7 @@ static void OnDropFiles(HDROP hDrop, bool dragFinish) {
             }
         }
         // The first dropped document may override the current window
-        LoadArgs args(filePath, nullptr);
+        LoadArgs args(filePath, win);
         if (isShift && !win) {
             win = CreateAndShowWindowInfo(nullptr);
             args.win = win;
@@ -1549,10 +1586,11 @@ static void OnDropFiles(HDROP hDrop, bool dragFinish) {
 LRESULT CALLBACK WndProcCanvas(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     // messages that don't require win
 
+    WindowInfo* win = FindWindowInfoByHwnd(hwnd);
     switch (msg) {
         case WM_DROPFILES:
             CrashIf(lp != 0 && lp != 1);
-            OnDropFiles((HDROP)wp, !lp);
+            OnDropFiles(win, (HDROP)wp, !lp);
             return 0;
 
         // https://docs.microsoft.com/en-us/windows/win32/winmsg/wm-erasebkgnd
@@ -1562,7 +1600,6 @@ LRESULT CALLBACK WndProcCanvas(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             return 1;
     }
 
-    WindowInfo* win = FindWindowInfoByHwnd(hwnd);
     if (!win) {
         return DefWindowProc(hwnd, msg, wp, lp);
     }

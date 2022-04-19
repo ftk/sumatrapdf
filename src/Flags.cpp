@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 #include "utils/BaseUtil.h"
@@ -9,8 +9,6 @@
 #include "SettingsStructs.h"
 #include "GlobalPrefs.h"
 #include "Flags.h"
-#include "ProgressUpdateUI.h"
-#include "Notifications.h"
 #include "WindowInfo.h"
 #include "StressTesting.h"
 #include "SumatraConfig.h"
@@ -37,13 +35,12 @@ Flags::~Flags() {
     str::Free(toEpubPath);
 }
 
-#if defined(DEBUG)
 static void EnumeratePrinters() {
     str::WStr output;
 
     PRINTER_INFO_5* info5Arr = nullptr;
-    DWORD bufSize{0};
-    DWORD printersCount{0};
+    DWORD bufSize = 0;
+    DWORD printersCount = 0;
     BOOL ok =
         EnumPrintersW(PRINTER_ENUM_LOCAL | PRINTER_ENUM_CONNECTIONS, nullptr, 5, nullptr, 0, &bufSize, &printersCount);
     if (ok != 0 || GetLastError() == ERROR_INSUFFICIENT_BUFFER) {
@@ -87,7 +84,6 @@ static void EnumeratePrinters() {
     free(info5Arr);
     MessageBox(nullptr, output.Get(), L"SumatraPDF - EnumeratePrinters", MB_OK | MB_ICONINFORMATION);
 }
-#endif
 
 // parses a list of page ranges such as 1,3-5,7- (i..e all but pages 2 and 6)
 // into an interable list (returns nullptr on parsing errors)
@@ -183,8 +179,6 @@ static void ParseScrollValue(Point* scroll, const WCHAR* txt) {
 }
 
 #define ARGS(V)                                  \
-    V(RegisterForPdf, "register-for-pdf")        \
-    V(RegisterForPdf2, "register")               \
     V(Silent, "s")                               \
     V(Silent2, "silent")                         \
     V(PrintToDefault, "print-to-default")        \
@@ -247,6 +241,9 @@ static void ParseScrollValue(Point* scroll, const WCHAR* txt) {
     V(MangaMode, "manga-mode")                   \
     V(ToEpub, "to-epub")                         \
     V(Search, "search")                          \
+    V(AllUsers, "all-users")                     \
+    V(AllUsers2, "allusers")                     \
+    V(RunInstallNow, "run-install-now")          \
     V(SetColorRange, "set-color-range")
 
 #define MAKE_ARG(__arg, __name) __arg,
@@ -272,19 +269,13 @@ static Arg GetArg(const WCHAR* s) {
 void ParseFlags(const WCHAR* cmdLine, Flags& i) {
     CmdLineArgsIter args(cmdLine);
 
-    const WCHAR* param{nullptr};
-    int paramInt{0};
+    const WCHAR* param = nullptr;
+    int paramInt = 0;
 
     for (auto argName = args.NextArg(); argName != nullptr; argName = args.NextArg()) {
         Arg arg = GetArg(argName);
         if (arg == Arg::Unknown) {
             goto CollectFile;
-        }
-
-        if (arg == Arg::RegisterForPdf || arg == Arg::RegisterForPdf2) {
-            i.registerAsDefault = true;
-            i.exitImmediately = true;
-            return;
         }
 
         if (arg == Arg::Silent || arg == Arg::Silent2) {
@@ -382,6 +373,14 @@ void ParseFlags(const WCHAR* cmdLine, Flags& i) {
             i.log = true;
             continue;
         }
+        if (arg == Arg::RunInstallNow) {
+            i.runInstallNow = true;
+            continue;
+        }
+        if (arg == Arg::AllUsers || arg == Arg::AllUsers2) {
+            i.allUsers = true;
+            continue;
+        }
         if (arg == Arg::CrashOnOpen) {
             // to make testing of crash reporting system in pre-release/release
             // builds possible
@@ -398,14 +397,12 @@ void ParseFlags(const WCHAR* cmdLine, Flags& i) {
             i.globalPrefArgs.Append(str::Dup(argName));
             continue;
         }
-#if defined(DEBUG)
-        if (arg == Arg::ArgEnumPrinters) {
+        if (arg == Arg::ArgEnumPrinters && (gIsDebugBuild || gIsPreReleaseBuild)) {
             EnumeratePrinters();
             /* this is for testing only, exit immediately */
             i.exitImmediately = true;
             return;
         }
-#endif
         param = args.EatParam();
         // follwing args require at least one param
         // if no params here, assume this is a file

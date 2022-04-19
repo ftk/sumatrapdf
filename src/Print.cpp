@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 #include "utils/BaseUtil.h"
@@ -8,7 +8,8 @@
 #include "utils/WinUtil.h"
 #include "utils/Log.h"
 
-#include "wingui/TreeModel.h"
+#include "wingui/UIModels.h"
+
 #include "DisplayMode.h"
 #include "Controller.h"
 #include "EngineBase.h"
@@ -17,8 +18,8 @@
 #include "GlobalPrefs.h"
 #include "ChmModel.h"
 #include "DisplayModel.h"
-#include "ProgressUpdateUI.h"
 #include "TextSelection.h"
+#include "ProgressUpdateUI.h"
 #include "TextSearch.h"
 #include "Notifications.h"
 #include "SumatraPDF.h"
@@ -63,14 +64,14 @@ class AbortCookieManager {
 };
 
 struct PrintData {
-    Printer* printer{nullptr};
-    EngineBase* engine{nullptr};
+    Printer* printer = nullptr;
+    EngineBase* engine = nullptr;
     Vec<PRINTPAGERANGE> ranges; // empty when printing a selection
     Vec<SelectionOnPage> sel;   // empty when printing a page range
     Print_Advanced_Data advData;
-    int rotation{0};
-    ProgressUpdateUI* progressUI{nullptr};
-    AbortCookieManager* abortCookie{nullptr};
+    int rotation = 0;
+    ProgressUpdateUI* progressUI = nullptr;
+    AbortCookieManager* abortCookie = nullptr;
 
     PrintData(EngineBase* engine, Printer* printer, Vec<PRINTPAGERANGE>& ranges, Print_Advanced_Data& advData,
               int rotation = 0, Vec<SelectionOnPage>* sel = nullptr) {
@@ -121,9 +122,9 @@ Printer::~Printer() {
 
 // get all the important info about a printer
 Printer* NewPrinter(WCHAR* printerName) {
-    HANDLE hPrinter{nullptr};
-    LONG ret{0};
-    Printer* printer{nullptr};
+    HANDLE hPrinter = nullptr;
+    LONG ret = 0;
+    Printer* printer = nullptr;
     BOOL ok = OpenPrinterW(printerName, &hPrinter, nullptr);
     if (!ok) {
         return nullptr;
@@ -668,7 +669,7 @@ void OnMenuPrint(WindowInfo* win, bool waitForCompletion) {
     static PrintScaleAdv defaultScaleAdv = PrintScaleAdv::Shrink;
     static bool hasDefaults = false;
 
-    Printer* printer{nullptr};
+    Printer* printer = nullptr;
 
     if (!hasDefaults) {
         hasDefaults = true;
@@ -754,9 +755,9 @@ void OnMenuPrint(WindowInfo* win, bool waitForCompletion) {
     pdex.lphPropertyPages = &hPsp;
     pdex.nPropertyPages = 1;
 
-    bool failedEngineClone{false};
-    PrintData* pd{nullptr};
-    DEVMODE* devMode{nullptr};
+    bool failedEngineClone = false;
+    PrintData* pd = nullptr;
+    DEVMODE* devMode = nullptr;
     // restore remembered settings
     if (defaultDevMode) {
         DEVMODE* p = defaultDevMode.Get();
@@ -939,7 +940,7 @@ static short GetPaperByName(Printer* printer, const WCHAR* wantedName) {
     }
 
     // alternatively allow indicating the paper directly by number
-    DWORD paperId{0};
+    DWORD paperId = 0;
     if (str::Parse(wantedName, L"%u%$", &paperId)) {
         return (short)paperId;
     }
@@ -970,7 +971,7 @@ static short GetPaperSourceByName(Printer* printer, const WCHAR* binName) {
             return printer->bins[i];
         }
     }
-    DWORD count{0};
+    DWORD count = 0;
     // alternatively allow indicating the paper bin directly by number
     if (str::Parse(binName, L"%u%$", &count)) {
         return (short)count;
@@ -1078,7 +1079,7 @@ static void SetPrinterCustomPaperSizeForEngine(EngineBase* engine, Printer* prin
 
 bool PrintFile(EngineBase* engine, WCHAR* printerName, bool displayErrors, const WCHAR* settings) {
     bool ok = false;
-    Printer* printer{nullptr};
+    Printer* printer = nullptr;
 
     if (!HasPermission(Perm::PrinterAccess)) {
         return false;

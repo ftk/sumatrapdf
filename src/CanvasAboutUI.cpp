@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 #include "utils/BaseUtil.h"
@@ -10,11 +10,10 @@
 #include "utils/WinUtil.h"
 #include "utils/ScopedWin.h"
 
-#include "wingui/WinGui.h"
+#include "wingui/UIModels.h"
+
 #include "wingui/Layout.h"
 #include "wingui/Window.h"
-#include "wingui/TreeModel.h"
-#include "wingui/TreeCtrl.h"
 #include "wingui/FrameRateWnd.h"
 
 #include "AppColors.h"
@@ -30,7 +29,6 @@
 #include "ProgressUpdateUI.h"
 #include "TextSelection.h"
 #include "TextSearch.h"
-#include "Notifications.h"
 #include "SumatraConfig.h"
 #include "SumatraPDF.h"
 #include "WindowInfo.h"
@@ -100,7 +98,7 @@ static void OnMouseLeftButtonUpAbout(WindowInfo* win, int x, int y, WPARAM) {
         return;
     }
     if (str::Eq(url, kLinkOpenFile)) {
-        HwndSendCommand(win->hwndFrame, CmdOpen);
+        HwndSendCommand(win->hwndFrame, CmdOpenFile);
     } else if (str::Eq(url, kLinkHideList)) {
         gGlobalPrefs->showStartPage = false;
         win->RedrawAll(true);

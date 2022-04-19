@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 #include "utils/BaseUtil.h"
@@ -7,7 +7,6 @@
 #include "utils/ScopedWin.h"
 #include "utils/WinUtil.h"
 
-#include "wingui/WinGui.h"
 #include "wingui/Layout.h"
 #include "wingui/Window.h"
 #include "wingui/LabelWithCloseWnd.h"
@@ -203,7 +202,7 @@ static void RegisterLabelWithCloseWnd() {
         return;
     }
 
-    WNDCLASSEX wcex = {};
+    WNDCLASSEX wcex{};
     FillWndClassEx(wcex, WND_CLASS_NAME, WndProcLabelWithClose);
     atom = RegisterClassExW(&wcex);
     CrashIf(!atom);
@@ -270,9 +269,8 @@ void LabelWithCloseWnd::SetPaddingXY(int x, int y) {
 
 Kind kindLabelWithClose = "labelWithClose";
 
-LabelWithCloseCtrl::LabelWithCloseCtrl(HWND p) {
+LabelWithCloseCtrl::LabelWithCloseCtrl() {
     kind = kindLabelWithClose;
-    parent = p;
     dwStyle = WS_VISIBLE | WS_CHILD;
     dwExStyle = 0;
     backgroundColor = GetSysColor(COLOR_BTNFACE);

@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 // note: include BaseUtil.h instead of including directly
@@ -15,10 +15,10 @@
 using PdfColor = uint64_t;
 
 struct ParsedColor {
-    bool wasParsed{false};
-    bool parsedOk{false};
-    COLORREF col{0};
-    PdfColor pdfCol{0};
+    bool wasParsed = false;
+    bool parsedOk = false;
+    COLORREF col = 0;
+    PdfColor pdfCol = 0;
 };
 
 COLORREF MkGray(u8 x);

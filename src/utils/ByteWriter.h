@@ -1,8 +1,8 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 struct ByteWriter {
-    bool isLE{false};
+    bool isLE = false;
     str::Str d;
 
     ByteWriter(size_t sizeHint = 0);

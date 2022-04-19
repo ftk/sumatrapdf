@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 #include "BaseUtil.h"
@@ -403,7 +403,7 @@ ByteSlice SerializeBitmap(HBITMAP hbmp) {
         return {};
     }
 
-    BITMAPINFO bmi = {0};
+    BITMAPINFO bmi{};
     bmi.bmiHeader.biSize = sizeof(bmi.bmiHeader);
     bmi.bmiHeader.biWidth = w;
     bmi.bmiHeader.biHeight = h;
@@ -418,7 +418,7 @@ ByteSlice SerializeBitmap(HBITMAP hbmp) {
     }
     ReleaseDC(nullptr, hDC);
 
-    TgaHeader headerLE = {0};
+    TgaHeader headerLE{};
     headerLE.imageType = Type_Truecolor_RLE;
     headerLE.width = convLE(w);
     headerLE.height = convLE(h);

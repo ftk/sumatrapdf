@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 #include "utils/BaseUtil.h"
@@ -9,7 +9,8 @@
 #include "utils/WinUtil.h"
 #include "utils/Timer.h"
 
-#include "wingui/TreeModel.h"
+#include "wingui/UIModels.h"
+
 #include "DisplayMode.h"
 #include "Controller.h"
 #include "EngineBase.h"
@@ -20,7 +21,6 @@
 #include "FileHistory.h"
 #include "GlobalPrefs.h"
 #include "ProgressUpdateUI.h"
-#include "Notifications.h"
 #include "SumatraPDF.h"
 #include "TabInfo.h"
 #include "Flags.h"
@@ -30,6 +30,7 @@
 #include "Favorites.h"
 #include "Toolbar.h"
 #include "Translations.h"
+#include "Accelerators.h"
 
 #include "utils/Log.h"
 
@@ -40,7 +41,7 @@ static WatchedFile* gWatchedSettingsFile = nullptr;
 
 // number of weeks past since 2011-01-01
 static int GetWeekCount() {
-    SYSTEMTIME date20110101 = {0};
+    SYSTEMTIME date20110101{};
     date20110101.wYear = 2011;
     date20110101.wMonth = 1;
     date20110101.wDay = 1;
@@ -64,6 +65,21 @@ const WCHAR* GetSettingsFileNameTemp() {
 
 WCHAR* GetSettingsPath() {
     return AppGenDataFilename(GetSettingsFileNameTemp());
+}
+
+static void setMin(int& i, int minVal) {
+    if (i < minVal) {
+        i = minVal;
+    }
+}
+
+static void setMinMax(int& i, int minVal, int maxVal) {
+    if (i < minVal) {
+        i = minVal;
+    }
+    if (i > maxVal) {
+        i = maxVal;
+    }
 }
 
 /* Caller needs to prefs::CleanUp() */
@@ -118,6 +134,38 @@ bool Load() {
     while (gprefs->zoomLevels->size() > 0 && gprefs->zoomLevels->Last() > ZOOM_MAX) {
         gprefs->zoomLevels->Pop();
     }
+
+    // sanitize WindowMargin and PageSpacing values
+    // https://github.com/sumatrapdfreader/sumatrapdf/issues/1899
+    {
+        auto&& m = gprefs->fixedPageUI.windowMargin;
+        setMin(m.bottom, 0);
+        setMin(m.top, 0);
+        setMin(m.left, 0);
+        setMin(m.right, 0);
+    }
+    {
+        auto&& m = gprefs->comicBookUI.windowMargin;
+        setMin(m.bottom, 0);
+        setMin(m.top, 0);
+        setMin(m.left, 0);
+        setMin(m.right, 0);
+    }
+    {
+        auto&& s = gprefs->fixedPageUI.pageSpacing;
+        setMin(s.dx, 0);
+        setMin(s.dy, 0);
+    }
+    {
+        auto&& s = gprefs->comicBookUI.pageSpacing;
+        setMin(s.dx, 0);
+        setMin(s.dy, 0);
+    }
+    setMin(gprefs->tabWidth, 60);
+    setMin(gprefs->sidebarDx, 0);
+    setMin(gprefs->tocDy, 0);
+    setMin(gprefs->treeFontSize, 0);
+    setMinMax(gprefs->toolbarSize, 8, 64);
 
     // TODO: verify that all states have a non-nullptr file path?
     gFileHistory.UpdateStatesSource(gprefs->fileStates);
@@ -289,6 +337,7 @@ bool Reload() {
 
     UpdateDocumentColors();
     UpdateFixedPageScrollbarsVisibility();
+    CreateSumatraAcceleratorTable();
     return true;
 }
 

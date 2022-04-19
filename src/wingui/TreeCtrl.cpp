@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 #include "utils/BaseUtil.h"
@@ -7,10 +7,10 @@
 #include "utils/WinUtil.h"
 #include "utils/WinDynCalls.h"
 
-#include "wingui/WinGui.h"
+#include "wingui/UIModels.h"
+
 #include "wingui/Layout.h"
 #include "wingui/Window.h"
-#include "wingui/TreeModel.h"
 #include "wingui/TreeCtrl.h"
 
 #include "utils/Log.h"
@@ -41,7 +41,8 @@ static void DragMove(TreeCtrl* w, int xCur, int yCur) {
     // drag the item to the current position of the mouse pointer
     // first convert the dialog coordinates to control coordinates
     POINT pt{xCur, yCur};
-    MapWindowPoints(w->parent, w->hwnd, &pt, 1);
+    auto parent = ::GetParent(w->hwnd);
+    MapWindowPoints(parent, w->hwnd, &pt, 1);
     ImageList_DragMove(pt.x, pt.y);
 
     // turn off the dragged image so the background can be refreshed.
@@ -144,7 +145,7 @@ static void DragStart(TreeCtrl* w, NMTREEVIEWW* nmtv) {
 
     // ShowCursor(FALSE);
     SetCursorCached(IDC_HAND);
-    SetCapture(w->parent);
+    SetCapture(GetParent(w->hwnd));
     w->isDragging = true;
 }
 
@@ -363,7 +364,7 @@ static void Handle_WM_NOTIFY(void* user, WndEvent* ev) {
         a.mouseWindow.y = pt.y;
 
         // determine which item has been clicked (if any)
-        TVHITTESTINFO ht = {0};
+        TVHITTESTINFO ht{};
         ht.pt.x = a.mouseWindow.x;
         ht.pt.y = a.mouseWindow.y;
         TreeView_HitTest(nmhdr->hwndFrom, &ht);
@@ -489,18 +490,17 @@ void TreeCtrl::WndProc(WndEvent* ev) {
     }
 }
 
-TreeCtrl::TreeCtrl(HWND p) : WindowBase(p) {
+TreeCtrl::TreeCtrl() {
     kind = kindTree;
     dwStyle = WS_CHILD | WS_VISIBLE | WS_TABSTOP;
     dwStyle |= TVS_HASBUTTONS | TVS_HASLINES | TVS_LINESATROOT | TVS_SHOWSELALWAYS;
     dwStyle |= TVS_TRACKSELECT | TVS_NOHSCROLL | TVS_INFOTIP;
     dwExStyle = TVS_EX_DOUBLEBUFFER;
     winClass = WC_TREEVIEWW;
-    parent = p;
     initialSize = {48, 120};
 }
 
-bool TreeCtrl::Create() {
+bool TreeCtrl::Create(HWND parent) {
     if (!supportDragDrop) {
         dwStyle |= TVS_DISABLEDRAGDROP;
     }
@@ -509,7 +509,7 @@ bool TreeCtrl::Create() {
         dwStyle &= ~TVS_HASLINES;
     }
 
-    bool ok = WindowBase::Create();
+    bool ok = WindowBase::Create(parent);
     if (!ok) {
         return false;
     }
@@ -568,7 +568,7 @@ TreeItem TreeCtrl::GetSelection() {
 }
 
 bool TreeCtrl::SelectItem(TreeItem ti) {
-    HTREEITEM hi{nullptr};
+    HTREEITEM hi = nullptr;
     if (ti != TreeModel::kNullItem) {
         hi = GetHandleByTreeItem(ti);
     }
@@ -617,9 +617,9 @@ TreeCtrl::~TreeCtrl() {
 
 str::WStr TreeCtrl::GetDefaultTooltip(TreeItem ti) {
     auto hItem = GetHandleByTreeItem(ti);
-    WCHAR buf[INFOTIPSIZE + 1] = {}; // +1 just in case
+    WCHAR buf[INFOTIPSIZE + 1]{}; // +1 just in case
 
-    TVITEMW item = {0};
+    TVITEMW item{};
     item.hItem = hItem;
     item.mask = TVIF_TEXT;
     item.pszText = buf;

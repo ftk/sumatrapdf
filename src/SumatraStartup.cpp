@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 #include "utils/BaseUtil.h"
@@ -16,20 +16,16 @@
 #include "utils/ThreadUtil.h"
 #include "utils/UITask.h"
 #include "utils/WinUtil.h"
-#include "utils/Archive.h"
-#include "utils/LzmaSimpleArchive.h"
 
 #include "SumatraConfig.h"
 
-#include "wingui/WinGui.h"
+#include "wingui/UIModels.h"
+
 #include "wingui/Layout.h"
 #include "wingui/Window.h"
-//#include "wingui/TooltipCtrl.h"
-#include "wingui/SplitterWnd.h"
-#include "wingui/LabelWithCloseWnd.h"
+#include "wingui/wingui2.h"
 
 #include "Accelerators.h"
-#include "wingui/TreeModel.h"
 #include "DisplayMode.h"
 #include "Controller.h"
 #include "EngineBase.h"
@@ -190,12 +186,6 @@ static bool RegisterWinClass() {
 
     FillWndClassEx(wcex, CANVAS_CLASS_NAME, WndProcCanvas);
     wcex.style |= CS_DBLCLKS;
-    atom = RegisterClassEx(&wcex);
-    CrashIf(!atom);
-
-    FillWndClassEx(wcex, PROPERTIES_CLASS_NAME, WndProcProperties);
-    wcex.hIcon = LoadIconW(h, iconName);
-    CrashIf(!wcex.hIcon);
     atom = RegisterClassEx(&wcex);
     CrashIf(!atom);
 
@@ -428,12 +418,12 @@ static HWND FindPrevInstWindow(HANDLE* hMutex) {
     AutoFreeWstr mapId = str::Format(L"SumatraPDF-%08x", hash);
 
     int retriesLeft = 3;
-    HANDLE hMap{nullptr};
-    HWND hwnd{nullptr};
-    DWORD prevProcId{0};
-    DWORD* procId{nullptr};
+    HANDLE hMap = nullptr;
+    HWND hwnd = nullptr;
+    DWORD prevProcId = 0;
+    DWORD* procId = nullptr;
     bool hasPrevInst;
-    DWORD lastErr{0};
+    DWORD lastErr = 0;
 Retry:
     // use a memory mapping containing a process id as mutex
     hMap = CreateFileMapping(INVALID_HANDLE_VALUE, nullptr, PAGE_READWRITE, 0, sizeof(DWORD), mapId);
@@ -477,45 +467,28 @@ Error:
     goto Retry;
 }
 
-// Registering happens either through the Installer or the Options dialog;
-// here we just make sure that we're still registered
-static bool RegisterForPdfExtentions(HWND hwnd) {
-    if (!HasPermission(Perm::RegistryAccess) || gPluginMode) {
-        return false;
-    }
-
-    if (IsExeAssociatedWithPdfExtension()) {
-        return true;
-    }
-
-    /* Ask user for permission, unless he previously said he doesn't want to
-       see this dialog */
-    if (!gGlobalPrefs->associateSilently) {
-        INT_PTR result = Dialog_PdfAssociate(hwnd, &gGlobalPrefs->associateSilently);
-        str::ReplaceWithCopy(&gGlobalPrefs->associatedExtensions, IDYES == result ? ".pdf" : nullptr);
-    }
-    // for now, .pdf is the only choice
-    if (!str::EqI(gGlobalPrefs->associatedExtensions, ".pdf")) {
-        return false;
-    }
-
-    AssociateExeWithPdfExtension();
-    return true;
-}
-
 static int RunMessageLoop() {
-    HACCEL accTable = CreateSumatraAcceleratorTable();
+    HACCEL* accTable = CreateSumatraAcceleratorTable();
 
     MSG msg{nullptr};
 
     while (GetMessage(&msg, nullptr, 0, 0)) {
-        // dispatch the accelerator to the correct window
-        HWND accHwnd = msg.hwnd;
-        WindowInfo* win = FindWindowInfoByHwnd(msg.hwnd);
-        if (win) {
-            accHwnd = win->hwndFrame;
+        if (wg::PreTranslateMessage(msg)) {
+            continue;
         }
-        if (TranslateAccelerator(accHwnd, accTable, &msg)) {
+
+        bool doAccels = ((msg.message >= WM_KEYFIRST && msg.message <= WM_KEYLAST) ||
+                         (msg.message >= WM_MOUSEFIRST && msg.message <= WM_MOUSELAST));
+
+        // dispatch the accelerator but only in frame / canvas
+        // this prevents translating accelerator in e.g. edit control
+        HWND hwnd = msg.hwnd;
+        WindowInfo* win = FindWindowInfoByHwnd(hwnd);
+        if (doAccels && win && (hwnd == win->hwndFrame || hwnd == win->hwndCanvas) &&
+            TranslateAccelerator(win->hwndFrame, *accTable, &msg)) {
+            continue;
+        }
+        if (doAccels && FindPropertyWindowByHwnd(hwnd) && TranslateAccelerator(hwnd, *accTable, &msg)) {
             continue;
         }
 
@@ -558,8 +531,8 @@ static void UpdateGlobalPrefs(const Flags& i) {
     }
     gGlobalPrefs->fixedPageUI.invertColors = i.invertColors;
 
-    WCHAR* arg{nullptr};
-    WCHAR* param{nullptr};
+    WCHAR* arg = nullptr;
+    WCHAR* param = nullptr;
     for (size_t n = 0; n < i.globalPrefArgs.size(); n++) {
         arg = i.globalPrefArgs.at(n);
         if (str::EqI(arg, L"-esc-to-exit")) {
@@ -650,8 +623,8 @@ static HRESULT CALLBACK TaskdialogHandleLinkscallback(HWND hwnd, UINT msg, WPARA
 
 // verify that libmupdf.dll matches the .exe
 static void VerifyNoLibmupdfMismatch() {
-    char* versionCheckFuncName{nullptr};
-    FARPROC addr{nullptr};
+    char* versionCheckFuncName = nullptr;
+    FARPROC addr = nullptr;
 
     if (!ExeHasInstallerResources()) {
         // this is not a version that needs libmupdf.dll
@@ -800,6 +773,39 @@ static void ShowNotValidInstallerError() {
     MessageBoxW(nullptr, L"Not a valid installer", L"Error", MB_OK | MB_ICONERROR);
 }
 
+static void ShowNoAdminErrorMessage() {
+    TASKDIALOGCONFIG dialogConfig{};
+    DWORD flags = TDF_ALLOW_DIALOG_CANCELLATION | TDF_POSITION_RELATIVE_TO_WINDOW | TDF_ENABLE_HYPERLINKS;
+    dialogConfig.cbSize = sizeof(TASKDIALOGCONFIG);
+    dialogConfig.cxWidth = 340;
+    dialogConfig.pszWindowTitle = L"SumatraPDF";
+    dialogConfig.pszMainInstruction = L"SumatraPDF is running as admin and cannot open files from a non-admin process";
+    ;
+    dialogConfig.pszContent =
+        LR"(<a href="https://github.com/sumatrapdfreader/sumatrapdf/discussions/2316">Read more about this error</a>)";
+    dialogConfig.nDefaultButton = IDOK;
+    dialogConfig.dwFlags = flags;
+    dialogConfig.pfCallback = TaskdialogHandleLinkscallback;
+    dialogConfig.dwCommonButtons = TDCBF_OK_BUTTON;
+    dialogConfig.pszMainIcon = TD_INFORMATION_ICON;
+
+    auto hr = TaskDialogIndirect(&dialogConfig, nullptr, nullptr, nullptr);
+    CrashIf(hr == E_INVALIDARG);
+}
+
+// non-admin process cannot send DDE messages to admin process
+// so when that happens we need to alert the user
+// TODO: maybe a better fix is to re-launch ourselves as admin?
+static bool IsNoAdminToAdmin(HWND hPrevWnd) {
+    DWORD otherProcId = 1;
+    GetWindowThreadProcessId(hPrevWnd, &otherProcId);
+    if (CanTalkToProcess(otherProcId)) {
+        return false;
+    }
+    ShowNoAdminErrorMessage();
+    return false;
+}
+
 #if 0
 static void LogDpiAwareness() {
     if (!DynGetThreadDpiAwarenessContext) {
@@ -848,7 +854,7 @@ bool gEnableMemLeak = false;
 // call this function before MemLeakInit() so that those allocations
 // don't show up
 static void ForceStartupLeaks() {
-    time_t secs{0};
+    time_t secs = 0;
     struct tm tm {
         0
     };
@@ -862,15 +868,28 @@ static void ForceStartupLeaks() {
     }
 }
 
+static char* GetLogFilePath() {
+    TempWstr dir = GetSpecialFolderTemp(CSIDL_LOCAL_APPDATA, true);
+    if (!dir.Get()) {
+        return nullptr;
+    }
+    auto path = path::Join(dir, L"sumatra-log.txt", nullptr);
+    auto res = strconv::WstrToUtf8(path);
+    str::Free(path);
+    return res;
+}
+
 int APIENTRY WinMain(HINSTANCE hInstance, __unused HINSTANCE hPrevInstance, __unused LPSTR cmdLine,
                      __unused int nCmdShow) {
-    int retCode{1}; // by default it's error
-    int nWithDde{0};
-    WindowInfo* win{nullptr};
-    bool showStartPage{false};
-    bool restoreSession{false};
-    HANDLE hMutex{nullptr};
-    HWND hPrevWnd{nullptr};
+    int retCode = 1; // by default it's error
+    int nWithDde = 0;
+    WindowInfo* win = nullptr;
+    bool showStartPage = false;
+    bool restoreSession = false;
+    HANDLE hMutex = nullptr;
+    HWND hPrevWnd = nullptr;
+    TabInfo* tabToSelect = nullptr;
+    const char* logFilePath = nullptr;
 
     CrashIf(hInstance != GetInstance());
 
@@ -905,7 +924,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, __unused HINSTANCE hPrevInstance, __un
     ForceStartupLeaks();
 
     // for testing mem leak detection
-    void* maybeLeak{nullptr};
+    void* maybeLeak = nullptr;
     if (gEnableMemLeak) {
         MemLeakInit();
         maybeLeak = malloc(10);
@@ -927,6 +946,17 @@ int APIENTRY WinMain(HINSTANCE hInstance, __unused HINSTANCE hPrevInstance, __un
     Flags flags;
     ParseFlags(GetCommandLineW(), flags);
     gCli = &flags;
+
+    bool isInstaller = flags.install || flags.runInstallNow || IsInstallerAndNamedAsSuch();
+    bool isUninstaller = flags.uninstall;
+    bool noLogHere = isInstaller || isUninstaller;
+
+    if (flags.log && !noLogHere) {
+        logFilePath = GetLogFilePath();
+        if (logFilePath) {
+            StartLogToFile(logFilePath, true);
+        }
+    }
 
 #if defined(DEBUG)
     if (gIsDebugBuild || gIsPreReleaseBuild) {
@@ -964,7 +994,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, __unused HINSTANCE hPrevInstance, __un
         return retCode;
     }
 
-    if (flags.install || IsInstallerAndNamedAsSuch()) {
+    if (isInstaller) {
         if (!ExeHasInstallerResources()) {
             ShowNotValidInstallerError();
             return 1;
@@ -975,7 +1005,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, __unused HINSTANCE hPrevInstance, __un
         return retCode;
     }
 
-    if (flags.uninstall) {
+    if (isUninstaller) {
         retCode = RunUninstaller();
         ::ExitProcess(retCode);
     }
@@ -1079,10 +1109,6 @@ int APIENTRY WinMain(HINSTANCE hInstance, __unused HINSTANCE hPrevInstance, __un
         RedirectIOToConsole();
     }
 
-    if (flags.registerAsDefault) {
-        AssociateExeWithPdfExtension();
-    }
-
     if (flags.pathsToBenchmark.size() > 0) {
         BenchFileOrDir(flags.pathsToBenchmark);
     }
@@ -1112,7 +1138,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, __unused HINSTANCE hPrevInstance, __un
     }
 
     {
-        // search only applies is there's 1 file
+        // search only applies if there's 1 file
         auto nFiles = flags.fileNames.size();
         if (nFiles != 1) {
             str::FreePtr(&flags.search);
@@ -1139,26 +1165,30 @@ int APIENTRY WinMain(HINSTANCE hInstance, __unused HINSTANCE hPrevInstance, __un
     } else if (gGlobalPrefs->reuseInstance || gGlobalPrefs->useTabs) {
         hPrevWnd = FindPrevInstWindow(&hMutex);
     }
+
     if (hPrevWnd) {
-        DWORD otherProcId = 1;
-        GetWindowThreadProcessId(hPrevWnd, &otherProcId);
-        if (!CanTalkToProcess(otherProcId)) {
-            // TODO: maybe just launch another instance. The problem with that
-            // is that they'll fight for settings file which might cause corruption
-            auto msg = "SumatraPDF is running as admin and cannot open files from a non-admin process";
-            MessageBoxA(nullptr, msg, "Error", MB_OK | MB_ICONERROR);
+        size_t nFiles = flags.fileNames.size();
+        // we allow -new-window on its own if no files given
+        if (nFiles > 0 && IsNoAdminToAdmin(hPrevWnd)) {
             goto Exit;
         }
-        size_t nFiles = flags.fileNames.size();
         for (size_t n = 0; n < nFiles; n++) {
             OpenUsingDde(hPrevWnd, flags.fileNames.at(n), flags, 0 == n);
         }
         if (0 == nFiles) {
-            win::ToForeground(hPrevWnd);
+            // https://github.com/sumatrapdfreader/sumatrapdf/issues/2306
+            // if -new-window cmd-line flag given, create a new window
+            // even if there are no files to open
+            if (flags.inNewWindow) {
+                goto ContinueOpenWindow;
+            } else {
+                win::ToForeground(hPrevWnd);
+            }
         }
         goto Exit;
     }
 
+ContinueOpenWindow:
     if (gGlobalPrefs->sessionData->size() > 0 && !gPluginURL) {
         restoreSession = gGlobalPrefs->restoreSession;
     }
@@ -1191,8 +1221,12 @@ int APIENTRY WinMain(HINSTANCE hInstance, __unused HINSTANCE hPrevInstance, __un
     ResetSessionState(gGlobalPrefs->sessionData);
 
     for (const WCHAR* filePath : flags.fileNames) {
-        if (restoreSession && FindWindowInfoByFile(filePath, false)) {
-            continue;
+        if (restoreSession) {
+            auto tab = FindTabByFile(filePath);
+            if (tab) {
+                tabToSelect = tab;
+                continue;
+            }
         }
         auto path = ToUtf8Temp(filePath);
         win = LoadOnStartup(filePath, flags, !win);
@@ -1204,6 +1238,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, __unused HINSTANCE hPrevInstance, __un
             OnMenuPrint(win, flags.exitWhenDone);
         }
     }
+    SelectTabInWindow(tabToSelect);
 
     nWithDde = (int)gDdeOpenOnStartup.size();
     if (nWithDde > 0) {
@@ -1232,17 +1267,14 @@ int APIENTRY WinMain(HINSTANCE hInstance, __unused HINSTANCE hPrevInstance, __un
         goto Exit;
     }
 
+    // call before creating first window and menu
+    CreateSumatraAcceleratorTable();
+
     if (!win) {
         win = CreateAndShowWindowInfo();
         if (!win) {
             goto Exit;
         }
-    }
-
-    // Make sure that we're still registered as default,
-    // if the user has explicitly told us to be
-    if (gGlobalPrefs->associatedExtensions) {
-        RegisterForPdfExtentions(win->hwndFrame);
     }
 
     if (flags.stressTestPath) {
@@ -1287,11 +1319,13 @@ Exit:
 
     HandleRedirectedConsoleOnShutdown();
 
+    ShowLogFile(logFilePath);
     if (fastExit) {
         // leave all the remaining clean-up to the OS
         // (as recommended for a quick exit)
         ::ExitProcess(retCode);
     }
+    str::Free(logFilePath);
 
     FreeExternalViewers();
     while (gWindows.size() > 0) {

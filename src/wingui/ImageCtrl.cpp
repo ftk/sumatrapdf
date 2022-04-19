@@ -1,11 +1,10 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 #include "utils/BaseUtil.h"
 #include "utils/ScopedWin.h"
 #include "utils/WinUtil.h"
 
-#include "wingui/WinGui.h"
 #include "wingui/Layout.h"
 #include "wingui/Window.h"
 #include "wingui/ImageCtrl.h"
@@ -14,7 +13,7 @@
 
 Kind kindImage = "image";
 
-ImageCtrl::ImageCtrl(HWND p) : WindowBase(p) {
+ImageCtrl::ImageCtrl() {
     dwStyle = WS_CHILD | WS_VISIBLE;
     winClass = WC_STATICW;
     kind = kindImage;
@@ -84,10 +83,10 @@ static void ImageCtrlWndProc(WndEvent* ev) {
     // logf("hwnd: 0x%6p, msg: 0x%03x (%s), wp: 0x%x\n", hwnd, msg, msgName, ev->wp);
 }
 
-bool ImageCtrl::Create() {
+bool ImageCtrl::Create(HWND parent) {
     // TODO: for now we require bmp to be set before calling Create()
     CrashIf(!bmp);
-    bool ok = WindowBase::Create();
+    bool ok = WindowBase::Create(parent);
     if (!ok) {
         return false;
     }

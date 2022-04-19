@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 #include "utils/BaseUtil.h"
@@ -9,11 +9,11 @@
 #include "utils/UITask.h"
 #include "utils/WinUtil.h"
 
-#include "wingui/WinGui.h"
+#include "wingui/UIModels.h"
+
 #include "wingui/Layout.h"
 #include "wingui/Window.h"
 #include "wingui/LabelWithCloseWnd.h"
-#include "wingui/TreeModel.h"
 #include "wingui/TreeCtrl.h"
 
 #include "DisplayMode.h"
@@ -24,8 +24,6 @@
 #include "SettingsStructs.h"
 #include "FileHistory.h"
 #include "GlobalPrefs.h"
-#include "ProgressUpdateUI.h"
-#include "Notifications.h"
 #include "SumatraPDF.h"
 #include "WindowInfo.h"
 #include "TabInfo.h"
@@ -42,13 +40,13 @@
 struct FavTreeItem {
     ~FavTreeItem();
 
-    HTREEITEM hItem{nullptr};
-    FavTreeItem* parent{nullptr};
-    WCHAR* text{nullptr};
-    bool isExpanded{false};
+    HTREEITEM hItem = nullptr;
+    FavTreeItem* parent = nullptr;
+    WCHAR* text = nullptr;
+    bool isExpanded = false;
 
     // not owned by us
-    Favorite* favorite{nullptr};
+    Favorite* favorite = nullptr;
 
     Vec<FavTreeItem*> children;
 };
@@ -72,7 +70,7 @@ struct FavTreeModel : public TreeModel {
     void SetHandle(TreeItem, HTREEITEM) override;
     HTREEITEM GetHandle(TreeItem) override;
 
-    FavTreeItem* root{nullptr};
+    FavTreeItem* root = nullptr;
 };
 
 FavTreeModel::~FavTreeModel() {
@@ -291,13 +289,13 @@ bool HasFavorites() {
 
 // caller has to free() the result
 static WCHAR* FavReadableName(Favorite* fn) {
-    const WCHAR* toFree{nullptr};
+    const WCHAR* toFree = nullptr;
     const WCHAR* label = ToWstrTemp(fn->pageLabel);
     if (!label) {
         label = str::Format(L"%d", fn->pageNo);
         toFree = label;
     }
-    WCHAR* res{nullptr};
+    WCHAR* res = nullptr;
     if (fn->name) {
         AutoFreeWstr pageNo(str::Format(_TR("(page %s)"), label));
         res = str::Join(ToWstrTemp(fn->name), L" ", pageNo);
@@ -872,7 +870,7 @@ void CreateFavorites(WindowInfo* win) {
     l->SetFont(GetDefaultGuiFont(true, false));
     // label is set in UpdateToolbarSidebarText()
 
-    TreeCtrl* treeCtrl = new TreeCtrl(win->hwndFavBox);
+    TreeCtrl* treeCtrl = new TreeCtrl();
 
     treeCtrl->fullRowSelect = true;
     treeCtrl->onContextMenu = FavTreeContextMenu;
@@ -886,7 +884,7 @@ void CreateFavorites(WindowInfo* win) {
     HFONT fnt = GetTreeFont();
     treeCtrl->SetFont(fnt);
 
-    bool ok = treeCtrl->Create();
+    bool ok = treeCtrl->Create(win->hwndFavBox);
     CrashIf(!ok);
 
     win->favTreeCtrl = treeCtrl;

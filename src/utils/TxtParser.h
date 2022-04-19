@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 #define SERIALIZE_ESCAPE_CHAR '$'
@@ -15,14 +15,14 @@ struct TxtNode {
 
     // for storing children, first goes into firstChild and the
     // rest are linked as sibling
-    TxtNode* firstChild{nullptr};
-    TxtNode* sibling{nullptr};
+    TxtNode* firstChild = nullptr;
+    TxtNode* sibling = nullptr;
 
-    char* lineStart{nullptr};
-    char* valStart{nullptr};
-    char* valEnd{nullptr};
-    char* keyStart{nullptr};
-    char* keyEnd{nullptr};
+    char* lineStart = nullptr;
+    char* valStart = nullptr;
+    char* valEnd = nullptr;
+    char* keyStart = nullptr;
+    char* keyEnd = nullptr;
 
     explicit TxtNode(TxtNode::Type tp);
     TxtNode(const TxtNode& other) = delete;
@@ -55,13 +55,13 @@ struct Token {
     Type type{Type::Finished};
 
     // TokenString, TokenKeyVal
-    char* lineStart{nullptr};
-    char* valStart{nullptr};
-    char* valEnd{nullptr};
+    char* lineStart = nullptr;
+    char* valStart = nullptr;
+    char* valEnd = nullptr;
 
     // TokenKeyVal
-    char* keyStart{nullptr};
-    char* keyEnd{nullptr};
+    char* keyStart = nullptr;
+    char* keyEnd = nullptr;
 };
 
 struct TxtParser {
@@ -71,7 +71,7 @@ struct TxtParser {
     str::Slice toParse;
     Token tok;
     char escapeChar{SERIALIZE_ESCAPE_CHAR};
-    bool failed{false};
+    bool failed = false;
     Vec<TxtNode*> nodes;
 
     TxtNode* AllocTxtNode(TxtNode::Type);

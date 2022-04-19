@@ -31,6 +31,7 @@
 #include "mupdf/fitz/image.h"
 #include "mupdf/fitz/output.h"
 #include "mupdf/fitz/device.h"
+#include "mupdf/fitz/pool.h"
 
 /**
 	Simple text layout (for use with annotation editing primarily).
@@ -285,6 +286,7 @@ char *fz_copy_rectangle(fz_context *ctx, fz_stext_page *page, fz_rect area, int 
 typedef struct
 {
 	int flags;
+	float scale;
 } fz_stext_options;
 
 /**

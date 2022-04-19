@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/kjk/minio"
@@ -84,11 +85,7 @@ func getVerForBuildType(buildType string) string {
 func getRemoteDir(buildType string) string {
 	panicIf(!isValidBuildType(buildType), "invalid build type: '%s'", buildType)
 	ver := getVerForBuildType(buildType)
-	dir := "software/sumatrapdf/" + buildType + "/"
-	if buildType == buildTypePreRel {
-		return dir + ver + "/"
-	}
-	return dir
+	return "software/sumatrapdf/" + buildType + "/" + ver + "/"
 }
 
 type DownloadUrls struct {
@@ -101,32 +98,30 @@ type DownloadUrls struct {
 	portableZip32 string
 }
 
-func getDownloadUrls(mc *minio.Client, buildType string, ver string) *DownloadUrls {
-	prefix := mc.URLBase()
-	prefix += getRemoteDir(buildType)
+func getDownloadUrlsForPrefix(prefix string, buildType string, ver string) *DownloadUrls {
 	// zip is like .exe but can be half the size due to compression
 	res := &DownloadUrls{
-		installer64:   prefix + "SumatraPDF-${buildType}-${ver}-64-install.exe",
-		portableExe64: prefix + "SumatraPDF-${buildType}-${ver}-64.exe",
-		portableZip64: prefix + "SumatraPDF-${buildType}-${ver}-64.zip",
-		installer32:   prefix + "SumatraPDF-${buildType}-${ver}-install.exe",
-		portableExe32: prefix + "SumatraPDF-${buildType}-${ver}.exe",
-		portableZip32: prefix + "SumatraPDF-${buildType}-${ver}.zip",
+		installer64:   prefix + "SumatraPDF-${ver}-64-install.exe",
+		portableExe64: prefix + "SumatraPDF-${ver}-64.exe",
+		portableZip64: prefix + "SumatraPDF-${ver}-64.zip",
+		installer32:   prefix + "SumatraPDF-${ver}-install.exe",
+		portableExe32: prefix + "SumatraPDF-${ver}.exe",
+		portableZip32: prefix + "SumatraPDF-${ver}.zip",
 	}
 	if buildType == buildTypePreRel {
 		// for pre-release, ${ver} is encoded prefix
 		res = &DownloadUrls{
-			installer64:   prefix + "SumatraPDF-${buildType}-64-install.exe",
-			portableExe64: prefix + "SumatraPDF-${buildType}-64.exe",
-			portableZip64: prefix + "SumatraPDF-${buildType}-64.zip",
-			installer32:   prefix + "SumatraPDF-${buildType}-install.exe",
-			portableExe32: prefix + "SumatraPDF-${buildType}.exe",
-			portableZip32: prefix + "SumatraPDF-${buildType}.zip",
+			installer64:   prefix + "SumatraPDF-prerel-64-install.exe",
+			portableExe64: prefix + "SumatraPDF-prerel-64.exe",
+			portableZip64: prefix + "SumatraPDF-prerel-64.zip",
+			installer32:   prefix + "SumatraPDF-prerel-install.exe",
+			portableExe32: prefix + "SumatraPDF-prerel.exe",
+			portableZip32: prefix + "SumatraPDF-prerel.zip",
 		}
 	}
 	rplc := func(s *string) {
 		*s = strings.Replace(*s, "${ver}", ver, -1)
-		*s = strings.Replace(*s, "${buildType}", buildType, -1)
+		//*s = strings.Replace(*s, "${buildType}", buildType, -1)
 	}
 	rplc(&res.installer64)
 	rplc(&res.portableExe64)
@@ -135,6 +130,48 @@ func getDownloadUrls(mc *minio.Client, buildType string, ver string) *DownloadUr
 	rplc(&res.portableExe32)
 	rplc(&res.portableZip32)
 	return res
+}
+
+func genUpdateTxt(urls *DownloadUrls, ver string) string {
+	s := `[SumatraPDF]
+Latest: ${ver}
+Installer64: ${inst64}
+Installer32: ${inst32}
+PortableExe64: ${exe64}
+PortableExe32: ${exe32}
+PortableZip64: ${zip64}
+PortableZip32: ${zip32}
+`
+	rplc := func(old, new string) {
+		s = strings.Replace(s, old, new, -1)
+	}
+	rplc("${ver}", ver)
+	rplc("${inst64}", urls.installer64)
+	rplc("${inst32}", urls.installer32)
+	rplc("${exe64}", urls.portableExe64)
+	rplc("${exe32}", urls.portableExe32)
+	rplc("${zip64}", urls.portableZip64)
+	rplc("${zip32}", urls.portableZip32)
+	return s
+}
+
+func testGenUpdateTxt() {
+	ver := "14276"
+	urls := getDownloadUrlsViaWebsite(buildTypePreRel, ver)
+	s := genUpdateTxt(urls, ver)
+	fmt.Printf("testGenUpdateTxt:\n%s\n", s)
+	os.Exit(0)
+}
+
+func getDownloadUrlsViaWebsite(buildType string, ver string) *DownloadUrls {
+	prefix := "https://www.sumatrapdfreader.org/dl/" + buildType + "/" + ver + "/"
+	return getDownloadUrlsForPrefix(prefix, buildType, ver)
+}
+
+func getDownloadUrlsDirectS3(mc *minio.Client, buildType string, ver string) *DownloadUrls {
+	prefix := mc.URLBase()
+	prefix += getRemoteDir(buildType)
+	return getDownloadUrlsForPrefix(prefix, buildType, ver)
 }
 
 // sumatrapdf/sumatralatest.js
@@ -150,10 +187,21 @@ func createSumatraLatestJs(mc *minio.Client, buildType string) string {
 	}
 
 	currDate := time.Now().Format("2006-01-02")
+	ver := getVerForBuildType(buildType)
+
+	// old version pointing directly to s3 storage
+	//host := strings.TrimSuffix(mc.URLBase(), "/")
+	//host + "software/sumatrapdf/" + buildType
+
+	// new version that redirects via www.sumatrapdfreader.org/dl/
+	host := "https://www.sumatrapdfreader.org/dl/prerel/" + ver
+	if buildType == buildTypeRel {
+		host = "https://www.sumatrapdfreader.org/dl/rel/" + ver
+	}
+
 	// TODO: use
 	// urls := getDownloadUrls(storage, buildType, ver)
 
-	host := strings.TrimSuffix(mc.URLBase(), "/")
 	tmplText := `
 var sumLatestVer = {{.Ver}};
 var sumCommitSha1 = "{{ .Sha1 }}";
@@ -170,10 +218,9 @@ var sumLatestExeZip64    = "{{.Host}}/{{.Prefix}}-64.zip";
 var sumLatestPdb64       = "{{.Host}}/{{.Prefix}}-64.pdb.zip";
 var sumLatestInstaller64 = "{{.Host}}/{{.Prefix}}-64-install.exe";
 `
-	ver := getVerForBuildType(buildType)
 	sha1 := getGitSha1()
 	d := map[string]interface{}{
-		"Host":     host + "software/sumatrapdf/" + buildType,
+		"Host":     host,
 		"Ver":      ver,
 		"Sha1":     sha1,
 		"CurrDate": currDate,
@@ -181,7 +228,6 @@ var sumLatestInstaller64 = "{{.Host}}/{{.Prefix}}-64-install.exe";
 	}
 	// for prerel, version is in path, not in name
 	if buildType == buildTypePreRel {
-		d["Host"] = host + "/software/sumatrapdf/" + buildType + "/" + ver
 		d["Prefix"] = appName
 	}
 	return execTextTemplate(tmplText, d)
@@ -204,30 +250,13 @@ func getVersionFilesForLatestInfo(mc *minio.Client, buildType string) [][]string
 		res = append(res, []string{remotePaths[1], ver})
 	}
 
-	// TODO: maybe provide download urls for both storage services
 	{
 		// *-update.txt : for current builds
-		urls := getDownloadUrls(mc, buildType, ver)
-		s := `[SumatraPDF]
-Latest: ${ver}
-Installer64: ${inst64}
-Installer32: ${inst32}
-PortableExe64: ${exe64}
-PortableExe32: ${exe32}
-PortableZip64: ${zip64}
-PortableZip32: ${zip32}
-`
-		rplc := func(old, new string) {
-			s = strings.Replace(s, old, new, -1)
+		urls := getDownloadUrlsViaWebsite(buildType, ver)
+		if false {
+			urls = getDownloadUrlsDirectS3(mc, buildType, ver)
 		}
-		rplc("${ver}", ver)
-		rplc("${inst64}", urls.installer64)
-		rplc("${inst32}", urls.installer32)
-		rplc("${exe64}", urls.portableExe64)
-		rplc("${exe32}", urls.portableExe32)
-		rplc("${zip64}", urls.portableZip64)
-		rplc("${zip32}", urls.portableZip32)
-
+		s := genUpdateTxt(urls, ver)
 		res = append(res, []string{remotePaths[2], s})
 	}
 
@@ -245,7 +274,7 @@ func minioVerifyBuildNotInStorageMust(mc *minio.Client, buildType string) {
 	panicIf(exists, "build of type '%s' for ver '%s' already exists in s3 because file '%s' exists\n", buildType, ver, remotePath)
 }
 
-// https://kjkpubsf.sfo2.digitaloceanspaces.com/software/sumatrapdf/prerel/SumatraPDF-prerelease-1027-install.exe etc.
+// https://kjkpubsf.sfo2.digitaloceanspaces.com/software/sumatrapdf/prerel/1024/SumatraPDF-prerelease-install.exe etc.
 func minioUploadBuildMust(mc *minio.Client, buildType string) {
 	timeStart := time.Now()
 	defer func() {
@@ -383,4 +412,55 @@ func newMinioS3Client() *minio.Client {
 	mc, err := minio.New(config)
 	must(err)
 	return mc
+}
+
+func newMinioBackblazeClient() *minio.Client {
+	config := &minio.Config{
+		Bucket:   "kjk-files",
+		Endpoint: "s3.us-west-001.backblazeb2.com",
+		Access:   os.Getenv("BB_ACCESS"),
+		Secret:   os.Getenv("BB_SECRET"),
+	}
+	mc, err := minio.New(config)
+	must(err)
+	return mc
+}
+
+func uploadToStorage(opts *BuildOptions, buildType string) {
+	if !opts.upload {
+		logf(ctx(), "Skipping uploadToStorage() because opts.upload = false\n")
+		return
+	}
+
+	timeStart := time.Now()
+	defer func() {
+		logf(ctx(), "uploadToStorage of '%s' finished in %s\n", buildType, time.Since(timeStart))
+	}()
+	var wg sync.WaitGroup
+
+	wg.Add(1)
+	go func() {
+		mc := newMinioBackblazeClient()
+		minioUploadBuildMust(mc, buildType)
+		minioDeleteOldBuildsPrefix(mc, buildTypePreRel)
+		wg.Done()
+	}()
+
+	wg.Add(1)
+	go func() {
+		mc := newMinioS3Client()
+		minioUploadBuildMust(mc, buildType)
+		minioDeleteOldBuildsPrefix(mc, buildTypePreRel)
+		wg.Done()
+	}()
+
+	wg.Add(1)
+	go func() {
+		mc := newMinioSpacesClient()
+		minioUploadBuildMust(mc, buildType)
+		minioDeleteOldBuildsPrefix(mc, buildTypePreRel)
+		wg.Done()
+	}()
+
+	wg.Wait()
 }

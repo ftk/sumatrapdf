@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 /* How to use:
@@ -39,5 +39,5 @@ class DirIter {
 
 bool CollectPathsFromDirectory(const WCHAR* pattern, WStrVec& paths, bool dirsInsteadOfFiles = false);
 
-bool CollectFilesFromDirectory(std::string_view dir, VecStr& files,
+bool CollectFilesFromDirectory(std::string_view dir, StrVec& files,
                                const std::function<bool(std::string_view path)>& fileMatches);

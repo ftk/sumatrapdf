@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 #define NO_COLOR (COLORREF) - 1
@@ -8,6 +8,7 @@
 
 #define DRAGQUERY_NUMFILES 0xFFFFFFFF
 
+bool ToBool(BOOL b);
 int RectDx(const RECT& r);
 int RectDy(const RECT& r);
 POINT MakePoint(long x, long y);
@@ -19,7 +20,9 @@ Rect ClientRect(HWND hwnd);
 Rect WindowRect(HWND hwnd);
 Rect MapRectToWindow(Rect rect, HWND hwndFrom, HWND hwndTo);
 
-void Edit_SelectAll(HWND hwnd);
+void EditSelectAll(HWND hwnd);
+int EditIdealDy(HWND hwnd, bool hasBorder, int lines = 1);
+
 void ListBox_AppendString_NoSort(HWND hwnd, WCHAR* txt);
 
 bool IsValidHandle(HANDLE);
@@ -39,15 +42,25 @@ const char* GetWindowsVerTemp();
 
 void LogLastError(DWORD err = 0);
 void DbgOutLastError(DWORD err = 0);
+
+// registry
+const char* RegKeyNameTemp(HKEY key);
+const WCHAR* RegKeyNameWTemp(HKEY key);
 bool RegKeyExists(HKEY keySub, const WCHAR* keyName);
 WCHAR* ReadRegStr(HKEY keySub, const WCHAR* keyName, const WCHAR* valName);
+WCHAR* LoggedReadRegStr(HKEY keySub, const WCHAR* keyName, const WCHAR* valName);
 char* ReadRegStrUtf8(HKEY keySub, const WCHAR* keyName, const WCHAR* valName);
 WCHAR* ReadRegStr2(const WCHAR* keyName, const WCHAR* valName);
+WCHAR* LoggedReadRegStr2(const WCHAR* keyName, const WCHAR* valName);
 bool WriteRegStr(HKEY keySub, const WCHAR* keyName, const WCHAR* valName, const WCHAR* value);
+bool LoggedWriteRegStr(HKEY keySub, const WCHAR* keyName, const WCHAR* valName, const WCHAR* value);
 bool ReadRegDWORD(HKEY keySub, const WCHAR* keyName, const WCHAR* valName, DWORD& value);
 bool WriteRegDWORD(HKEY keySub, const WCHAR* keyName, const WCHAR* valName, DWORD value);
+bool LoggedWriteRegDWORD(HKEY keySub, const WCHAR* keyName, const WCHAR* valName, DWORD value);
 bool CreateRegKey(HKEY keySub, const WCHAR* keyName);
 bool DeleteRegKey(HKEY keySub, const WCHAR* keyName, bool resetACLFirst = false);
+bool LoggedDeleteRegKey(HKEY keySub, const WCHAR* keyName, bool resetACLFirst = false);
+
 TempWstr GetSpecialFolderTemp(int csidl, bool createIfMissing = false);
 
 void DisableDataExecution();
@@ -118,8 +131,7 @@ void SetRtl(HWND hwnd, bool isRtl);
 Rect ChildPosWithinParent(HWND);
 
 int GetSizeOfDefaultGuiFont();
-HFONT GetDefaultGuiFont();
-HFONT GetDefaultGuiFont(bool bold, bool italic);
+HFONT GetDefaultGuiFont(bool bold = false, bool italic = false);
 HFONT GetDefaultGuiFontOfSize(int size);
 
 IStream* CreateStreamFromData(ByteSlice);
@@ -224,9 +236,9 @@ struct BitmapPixels {
 };
 
 struct RenderedBitmap {
-    HBITMAP hbmp{nullptr};
-    Size size = {};
-    HANDLE hMap = {};
+    HBITMAP hbmp = nullptr;
+    Size size{};
+    HANDLE hMap{};
 
     RenderedBitmap(HBITMAP hbmp, Size size, HANDLE hMap = nullptr) : hbmp(hbmp), size(size), hMap(hMap) {
     }
@@ -272,6 +284,7 @@ bool IsValidDelayType(int type);
 
 void HwndDpiAdjust(HWND, float* x, float* y);
 void HwndSetText(HWND, std::string_view s);
+void HwndSetText(HWND, const WCHAR*);
 HICON HwndSetIcon(HWND, HICON);
 HICON HwndGetIcon(HWND);
 void HwndInvalidate(HWND);
@@ -281,6 +294,11 @@ Size HwndMeasureText(HWND hwnd, const WCHAR* txt, HFONT font);
 void HwndPositionToTheRightOf(HWND hwnd, HWND hwndRelative);
 void HwndPositionInCenterOf(HWND hwnd, HWND hwndRelative);
 void HwndSendCommand(HWND hwnd, int cmdId);
+void HwndDestroyWindowSafe(HWND* hwnd);
+
+bool DeleteObjectSafe(HGDIOBJ*);
+bool DeleteFontSafe(HFONT*);
+bool DestroyIconSafe(HICON*);
 
 void TbSetButtonInfo(HWND hwnd, int buttonId, TBBUTTONINFO* info);
 void TbGetPadding(HWND, int* padX, int* padY);

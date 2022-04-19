@@ -537,7 +537,6 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="..\src\Accelerators.h" />
-    <ClInclude Include="..\src\Actions.h" />
     <ClInclude Include="..\src\AppColors.h" />
     <ClInclude Include="..\src\AppPrefs.h" />
     <ClInclude Include="..\src\AppTools.h" />
@@ -545,6 +544,7 @@
     <ClInclude Include="..\src\Canvas.h" />
     <ClInclude Include="..\src\Caption.h" />
     <ClInclude Include="..\src\ChmModel.h" />
+    <ClInclude Include="..\src\CommandPalette.h" />
     <ClInclude Include="..\src\Commands.h" />
     <ClInclude Include="..\src\Controller.h" />
     <ClInclude Include="..\src\CrashHandler.h" />
@@ -597,12 +597,22 @@
     <ClInclude Include="..\src\uia\StartPageProvider.h" />
     <ClInclude Include="..\src\uia\TextRange.h" />
     <ClInclude Include="..\src\utils\UtAssert.h" />
+    <ClInclude Include="..\src\wingui\DialogSizer.h" />
+    <ClInclude Include="..\src\wingui\FrameRateWnd.h" />
+    <ClInclude Include="..\src\wingui\ImageCtrl.h" />
+    <ClInclude Include="..\src\wingui\LabelWithCloseWnd.h" />
+    <ClInclude Include="..\src\wingui\Layout.h" />
+    <ClInclude Include="..\src\wingui\TabsCtrl.h" />
+    <ClInclude Include="..\src\wingui\TooltipCtrl.h" />
+    <ClInclude Include="..\src\wingui\TreeCtrl.h" />
+    <ClInclude Include="..\src\wingui\UIModels.h" />
+    <ClInclude Include="..\src\wingui\Window.h" />
+    <ClInclude Include="..\src\wingui\wingui2.h" />
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\ext\synctex\synctex_parser.c" />
     <ClCompile Include="..\ext\synctex\synctex_parser_utils.c" />
     <ClCompile Include="..\src\Accelerators.cpp" />
-    <ClCompile Include="..\src\Actions.cpp" />
     <ClCompile Include="..\src\AppColors.cpp" />
     <ClCompile Include="..\src\AppPrefs.cpp" />
     <ClCompile Include="..\src\AppTools.cpp" />
@@ -611,6 +621,8 @@
     <ClCompile Include="..\src\CanvasAboutUI.cpp" />
     <ClCompile Include="..\src\Caption.cpp" />
     <ClCompile Include="..\src\ChmModel.cpp" />
+    <ClCompile Include="..\src\CommandPalette.cpp" />
+    <ClCompile Include="..\src\Commands.cpp" />
     <ClCompile Include="..\src\CrashHandler.cpp" />
     <ClCompile Include="..\src\DisplayMode.cpp" />
     <ClCompile Include="..\src\DisplayModel.cpp" />
@@ -846,9 +858,19 @@
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='ReleaseAnalyze|x64'">true</ExcludedFromBuild>
       <ExcludedFromBuild Condition="'$(Configuration)|$(Platform)'=='ReleaseAnalyze x64_asan|x64'">true</ExcludedFromBuild>
     </ClCompile>
+    <ClCompile Include="..\src\wingui\DialogSizer.cpp" />
+    <ClCompile Include="..\src\wingui\FrameRateWnd.cpp" />
+    <ClCompile Include="..\src\wingui\ImageCtrl.cpp" />
+    <ClCompile Include="..\src\wingui\LabelWithCloseWnd.cpp" />
+    <ClCompile Include="..\src\wingui\Layout.cpp" />
+    <ClCompile Include="..\src\wingui\TabsCtrl.cpp" />
+    <ClCompile Include="..\src\wingui\TooltipCtrl.cpp" />
+    <ClCompile Include="..\src\wingui\TreeCtrl.cpp" />
+    <ClCompile Include="..\src\wingui\UIModels.cpp" />
+    <ClCompile Include="..\src\wingui\Window.cpp" />
+    <ClCompile Include="..\src\wingui\wingui2.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="..\src\docs\log.txt" />
     <None Include="..\src\docs\releasenotes.txt" />
     <None Include="..\src\docs\todo.txt" />
     <None Include="..\src\docs\translations.txt" />

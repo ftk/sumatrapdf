@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 // define the following if you want shadows drawn around the pages
@@ -120,14 +120,14 @@ struct DisplayModel : Controller {
     [[nodiscard]] Kind GetEngineType() const;
 
     // controller-specific data (easier to save here than on WindowInfo)
-    Kind engineType{nullptr};
+    Kind engineType = nullptr;
 
-    Synchronizer* pdfSync{nullptr};
+    Synchronizer* pdfSync = nullptr;
 
-    DocumentTextCache* textCache{nullptr};
-    TextSelection* textSelection{nullptr};
+    DocumentTextCache* textCache = nullptr;
+    TextSelection* textSelection = nullptr;
     // access only from Search thread
-    TextSearch* textSearch{nullptr};
+    TextSearch* textSearch = nullptr;
 
     [[nodiscard]] PageInfo* GetPageInfo(int pageNo) const;
     [[nodiscard]] PageInfo* GetPageDimensions(int pageNo, bool content = false) const;
@@ -157,6 +157,9 @@ struct DisplayModel : Controller {
     void ScrollXBy(int dx);
     void ScrollYTo(int yOff);
     void ScrollYBy(int dy, bool changePage);
+
+    [[nodiscard]] int yOffset();
+
     /* a "virtual" zoom level. Can be either a real zoom level in percent
        (i.e. 100.0 is original size) or one of virtual values ZOOM_FIT_PAGE,
        ZOOM_FIT_WIDTH or ZOOM_FIT_CONTENT, whose real value depends on draw area size */
@@ -204,16 +207,16 @@ struct DisplayModel : Controller {
     bool GoToPrevPage(int scrollY);
     int GetPageNextToPoint(Point pt) const;
 
-    EngineBase* engine{nullptr};
+    EngineBase* engine = nullptr;
 
     /* an array of PageInfo, len of array is pageCount */
-    PageInfo* pagesInfo{nullptr};
+    PageInfo* pagesInfo = nullptr;
 
     DisplayMode displayMode{DisplayMode::Automatic};
     /* In non-continuous mode is the first page from a file that we're
        displaying.
        No meaning in continuous mode. */
-    int startPage{1};
+    int startPage = 1;
 
     /* size of virtual canvas containing all rendered pages. */
     Size canvasSize;
@@ -232,7 +235,7 @@ struct DisplayModel : Controller {
        except for ZOOM_FIT_PAGE, ZOOM_FIT_WIDTH and ZOOM_FIT_CONTENT */
     float zoomReal{INVALID_ZOOM};
     float zoomVirtual{INVALID_ZOOM};
-    int rotation{0};
+    int rotation = {0};
     /* dpi correction factor by which _zoomVirtual has to be multiplied in
        order to get _zoomReal */
     float dpiFactor{1.0f};
@@ -242,14 +245,14 @@ struct DisplayModel : Controller {
     Vec<ScrollState> navHistory;
     /* index of the "current" history entry (to be updated on navigation),
        resp. number of Back history entries */
-    size_t navHistoryIdx{0};
+    size_t navHistoryIdx = {0};
 
     /* whether to display pages Left-to-Right or Right-to-Left.
        this value is extracted from the PDF document */
-    bool displayR2L{false};
+    bool displayR2L = false;
 
     /* when we're in presentation mode, _pres* contains the pre-presentation values */
-    bool presentationMode{false};
+    bool presentationMode = false;
 
     /* allow resizing a window without triggering a new rendering (needed for window destruction) */
     bool dontRenderFlag = false;

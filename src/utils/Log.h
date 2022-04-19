@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 extern HeapAllocator* gLogAllocator;
@@ -9,7 +9,7 @@ extern bool gReducedLogging;
 extern bool gLogToPipe;
 extern bool gStopLogging;
 extern const char* gLogAppName;
-void StartLogToFile(const char* path);
+void StartLogToFile(const char* path, bool removeIfExists);
 
 /*
 If you do:

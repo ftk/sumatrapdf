@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 #include "utils/BaseUtil.h"
@@ -7,12 +7,12 @@
 #include "utils/FileUtil.h"
 #include "utils/WinUtil.h"
 
-#include "wingui/WinGui.h"
+#include "wingui/UIModels.h"
+
 #include "wingui/Layout.h"
 #include "wingui/Window.h"
 #include "wingui/TooltipCtrl.h"
 
-#include "wingui/TreeModel.h"
 #include "DisplayMode.h"
 #include "Controller.h"
 #include "EngineBase.h"
@@ -21,8 +21,6 @@
 #include "FileHistory.h"
 #include "AppColors.h"
 #include "GlobalPrefs.h"
-#include "ProgressUpdateUI.h"
-#include "Notifications.h"
 #include "SumatraPDF.h"
 #include "SumatraConfig.h"
 #include "WindowInfo.h"
@@ -463,8 +461,8 @@ static void CreateInfotipForLink(StaticLinkInfo* linkInfo) {
         return;
     }
 
-    gAboutTooltip = new TooltipCtrl(gHwndAbout);
-    gAboutTooltip->Create();
+    gAboutTooltip = new TooltipCtrl();
+    gAboutTooltip->Create(gHwndAbout);
     gAboutTooltip->ShowOrUpdate(linkInfo->infotip, linkInfo->rect, false);
 }
 
@@ -543,7 +541,7 @@ LRESULT CALLBACK WndProcAbout(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
     return 0;
 }
 
-void OnMenuAbout() {
+void OnMenuAbout(WindowInfo* win) {
     if (gHwndAbout) {
         SetActiveWindow(gHwndAbout);
         return;
@@ -583,6 +581,7 @@ void OnMenuAbout() {
     wRc.dy += rc.dy - cRc.dy;
     MoveWindow(gHwndAbout, wRc.x, wRc.y, wRc.dx, wRc.dy, FALSE);
 
+    HwndPositionInCenterOf(gHwndAbout, win->hwndFrame);
     ShowWindow(gHwndAbout, SW_SHOW);
 }
 

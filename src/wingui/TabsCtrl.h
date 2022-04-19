@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 struct TabsCtrl;
@@ -26,7 +26,7 @@ class TabsCtrlPrivate;
 struct TabsCtrl {
     // creation parameters. must be set before CreateTabsCtrl
     HWND parent = nullptr;
-    RECT initialPos = {};
+    RECT initialPos{};
 
     TabSelectedCb onTabSelected = nullptr;
     TabClosedCb onTabClosed = nullptr;
@@ -50,17 +50,17 @@ void SetFont(TabsCtrl*, HFONT);
 
 struct TabsCtrl2 : WindowBase {
     str::WStr lastTabText;
-    bool createToolTipsHwnd{false};
+    bool createToolTipsHwnd = false;
     str::WStr currTooltipText;
 
     WStrVec tooltips;
 
     // for all WM_NOTIFY messages
-    WmNotifyHandler onNotify{nullptr};
+    WmNotifyHandler onNotify = nullptr;
 
-    explicit TabsCtrl2(HWND parent);
+    TabsCtrl2();
     ~TabsCtrl2() override;
-    bool Create() override;
+    bool Create(HWND parent) override;
 
     void WndProc(WndEvent*) override;
 

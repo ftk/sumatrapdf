@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 #include "utils/BaseUtil.h"
@@ -12,7 +12,8 @@
 #include "utils/HtmlPullParser.h"
 #include "utils/TrivialHtmlParser.h"
 
-#include "wingui/TreeModel.h"
+#include "wingui/UIModels.h"
+
 #include "DisplayMode.h"
 #include "Controller.h"
 #include "EngineBase.h"
@@ -192,13 +193,13 @@ static_assert(kCdicHeaderLen == sizeof(CdicHeader), "wrong size of CdicHeader st
 #define kCdicsMax 32
 
 class HuffDicDecompressor {
-    u32 cacheTable[kCacheItemCount] = {};
-    u32 baseTable[kBaseTableItemCount] = {};
+    u32 cacheTable[kCacheItemCount]{};
+    u32 baseTable[kBaseTableItemCount]{};
 
     size_t dictsCount = 0;
     // owned by the creator (in our case: by the PdbReader)
-    u8* dicts[kCdicsMax] = {};
-    u32 dictSize[kCdicsMax] = {};
+    u8* dicts[kCdicsMax]{};
+    u32 dictSize[kCdicsMax]{};
 
     u32 codeLength = 0;
 

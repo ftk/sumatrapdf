@@ -1,50 +1,50 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 struct TreeCtrl;
 
 struct TreeItmGetTooltipEvent : WndEvent {
-    TreeCtrl* treeCtrl{nullptr};
-    TreeItem treeItem{0};
-    NMTVGETINFOTIPW* info{nullptr};
+    TreeCtrl* treeCtrl = nullptr;
+    TreeItem treeItem = 0;
+    NMTVGETINFOTIPW* info = nullptr;
 };
 
 using TreeItemGetTooltipHandler = std::function<void(TreeItmGetTooltipEvent*)>;
 
 struct TreeSelectionChangedEvent : WndEvent {
-    TreeCtrl* treeCtrl{nullptr};
-    TreeItem prevSelectedItem{0};
-    TreeItem selectedItem{0};
-    NMTREEVIEW* nmtv{nullptr};
-    bool byKeyboard{false};
-    bool byMouse{false};
+    TreeCtrl* treeCtrl = nullptr;
+    TreeItem prevSelectedItem = 0;
+    TreeItem selectedItem = 0;
+    NMTREEVIEW* nmtv = nullptr;
+    bool byKeyboard = false;
+    bool byMouse = false;
 };
 
 using TreeSelectionChangedHandler = std::function<void(TreeSelectionChangedEvent*)>;
 
 struct TreeItemExpandedEvent : WndEvent {
-    TreeCtrl* treeCtrl{nullptr};
-    TreeItem treeItem{0};
-    bool isExpanded{false};
+    TreeCtrl* treeCtrl = nullptr;
+    TreeItem treeItem = 0;
+    bool isExpanded = false;
 };
 
 using TreeItemExpandedHandler = std::function<void(TreeItemExpandedEvent*)>;
 
 struct TreeItemState {
-    bool isSelected{false};
-    bool isExpanded{false};
-    bool isChecked{false};
-    int nChildren{0};
+    bool isSelected = false;
+    bool isExpanded = false;
+    bool isChecked = false;
+    int nChildren = 0;
 };
 
 struct TreeItemChangedEvent : WndEvent {
-    TreeCtrl* treeCtrl{nullptr};
-    TreeItem treeItem{0};
-    NMTVITEMCHANGE* nmic{nullptr};
+    TreeCtrl* treeCtrl = nullptr;
+    TreeItem treeItem = 0;
+    NMTVITEMCHANGE* nmic = nullptr;
 
-    bool checkedChanged{false};
-    bool expandedChanged{false};
-    bool selectedChanged{false};
+    bool checkedChanged = false;
+    bool expandedChanged = false;
+    bool selectedChanged = false;
     // except for nChildren
     TreeItemState prevState{};
     TreeItemState newState{};
@@ -53,17 +53,17 @@ struct TreeItemChangedEvent : WndEvent {
 using TreeItemChangedHandler = std::function<void(TreeItemChangedEvent*)>;
 
 struct TreeItemCustomDrawEvent : WndEvent {
-    TreeCtrl* treeCtrl{nullptr};
-    TreeItem treeItem{0};
-    NMTVCUSTOMDRAW* nm{nullptr};
+    TreeCtrl* treeCtrl = nullptr;
+    TreeItem treeItem = 0;
+    NMTVCUSTOMDRAW* nm = nullptr;
 };
 
 using TreeItemCustomDrawHandler = std::function<void(TreeItemCustomDrawEvent*)>;
 
 struct TreeClickEvent : WndEvent {
-    TreeCtrl* treeCtrl{nullptr};
-    TreeItem treeItem{0};
-    bool isDblClick{false};
+    TreeCtrl* treeCtrl = nullptr;
+    TreeItem treeItem = 0;
+    bool isDblClick = false;
 
     // mouse x,y position relative to the window
     Point mouseWindow{};
@@ -74,27 +74,27 @@ struct TreeClickEvent : WndEvent {
 using TreeClickHandler = std::function<void(TreeClickEvent*)>;
 
 struct TreeKeyDownEvent : WndEvent {
-    TreeCtrl* treeCtrl{nullptr};
-    NMTVKEYDOWN* nmkd{nullptr};
-    int keyCode{0};
-    u32 flags{0};
+    TreeCtrl* treeCtrl = nullptr;
+    NMTVKEYDOWN* nmkd = nullptr;
+    int keyCode = 0;
+    u32 flags = 0;
 };
 
 using TreeKeyDownHandler = std::function<void(TreeKeyDownEvent*)>;
 
 struct TreeGetDispInfoEvent : WndEvent {
-    TreeCtrl* treeCtrl{nullptr};
-    TreeItem treeItem{0};
-    NMTVDISPINFOEXW* dispInfo{nullptr};
+    TreeCtrl* treeCtrl = nullptr;
+    TreeItem treeItem = 0;
+    NMTVDISPINFOEXW* dispInfo = nullptr;
 };
 
 using TreeGetDispInfoHandler = std::function<void(TreeGetDispInfoEvent*)>;
 
 struct TreeItemDraggeddEvent {
-    TreeCtrl* treeCtrl{nullptr};
-    TreeItem draggedItem{0};
-    TreeItem dragTargetItem{0};
-    bool isStart{false};
+    TreeCtrl* treeCtrl = nullptr;
+    TreeItem draggedItem = 0;
+    TreeItem dragTargetItem = 0;
+    bool isStart = false;
 };
 
 using TreeItemDraggedHandler = std::function<void(TreeItemDraggeddEvent*)>;
@@ -107,60 +107,60 @@ using TreeItemDraggedHandler = std::function<void(TreeItemDraggeddEvent*)>;
 
 struct TreeCtrl : WindowBase {
     // creation parameters. must be set before Create() call
-    bool withCheckboxes{false};
+    bool withCheckboxes = false;
 
     // sets TVS_FULLROWSELECT style
     // https://docs.microsoft.com/en-us/windows/win32/controls/tree-view-control-window-styles
-    bool fullRowSelect{false};
+    bool fullRowSelect = false;
 
     // set before Create() to enable drag&drop
-    bool supportDragDrop{false};
+    bool supportDragDrop = false;
 
     // TODO: possibly not needed anymore
-    bool isDragging{false};
+    bool isDragging = false;
 
-    TreeItem draggedItem{0};
-    TreeItem dragTargetItem{0};
+    TreeItem draggedItem = 0;
+    TreeItem dragTargetItem = 0;
 
     // treeModel not owned by us
-    TreeModel* treeModel{nullptr};
+    TreeModel* treeModel = nullptr;
 
     // for all WM_NOTIFY messages
-    WmNotifyHandler onNotify{nullptr};
+    WmNotifyHandler onNotify = nullptr;
 
     // for WM_NOTIFY with TVN_GETINFOTIP
-    TreeItemGetTooltipHandler onGetTooltip{nullptr};
+    TreeItemGetTooltipHandler onGetTooltip = nullptr;
 
     // for WM_NOTIFY with TVN_SELCHANGED
-    TreeSelectionChangedHandler onTreeSelectionChanged{nullptr};
+    TreeSelectionChangedHandler onTreeSelectionChanged = nullptr;
 
     // for WM_NOTIFY with TVN_ITEMEXPANDED
-    TreeItemExpandedHandler onTreeItemExpanded{nullptr};
+    TreeItemExpandedHandler onTreeItemExpanded = nullptr;
 
     // for WM_NOTIFY with TVN_ITEMCHANGED
-    TreeItemChangedHandler onTreeItemChanged{nullptr};
+    TreeItemChangedHandler onTreeItemChanged = nullptr;
 
     // for WM_NOTIFY wiht NM_CUSTOMDRAW
-    TreeItemCustomDrawHandler onTreeItemCustomDraw{nullptr};
+    TreeItemCustomDrawHandler onTreeItemCustomDraw = nullptr;
 
     // for WM_NOTIFY with NM_CLICK or NM_DBCLICK
-    TreeClickHandler onTreeClick{nullptr};
+    TreeClickHandler onTreeClick = nullptr;
 
     // for WM_NOITFY with TVN_KEYDOWN
-    TreeKeyDownHandler onTreeKeyDown{nullptr};
+    TreeKeyDownHandler onTreeKeyDown = nullptr;
 
     // for WM_NOTIFY with TVN_GETDISPINFO
-    TreeGetDispInfoHandler onTreeGetDispInfo{nullptr};
+    TreeGetDispInfoHandler onTreeGetDispInfo = nullptr;
 
     // for TVN_BEGINDRAG / WM_MOUSEMOVE / WM_LBUTTONUP
-    TreeItemDraggedHandler onTreeItemDragStartEnd{nullptr};
+    TreeItemDraggedHandler onTreeItemDragStartEnd = nullptr;
 
     Size idealSize{};
 
     // private
     TVITEMW item{};
 
-    explicit TreeCtrl(HWND parent);
+    TreeCtrl();
     ~TreeCtrl() override;
 
     Size GetIdealSize() override;
@@ -179,7 +179,7 @@ struct TreeCtrl : WindowBase {
     TreeItem GetItemAt(int x, int y);
     bool IsExpanded(TreeItem);
 
-    bool Create() override;
+    bool Create(HWND parent) override;
 
     void SetBackgroundColor(COLORREF);
     void SetTextColor(COLORREF);

@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 /* Code related to:
@@ -13,7 +13,8 @@
 #include "utils/WinUtil.h"
 #include "utils/Log.h"
 
-#include "wingui/TreeModel.h"
+#include "wingui/UIModels.h"
+
 #include "DisplayMode.h"
 #include "Controller.h"
 #include "EngineBase.h"
@@ -209,14 +210,14 @@ static void UpdateFindStatusTask(WindowInfo* win, NotificationWnd* wnd, int curr
 }
 
 struct FindThreadData : public ProgressUpdateUI {
-    WindowInfo* win{nullptr};
+    WindowInfo* win = nullptr;
     TextSearchDirection direction{TextSearchDirection::Forward};
-    bool wasModified{false};
+    bool wasModified = false;
     AutoFreeWstr text;
     // owned by win->notifications, as FindThreadData
     // can be deleted before the notification times out
-    NotificationWnd* wnd{nullptr};
-    HANDLE thread{nullptr};
+    NotificationWnd* wnd = nullptr;
+    HANDLE thread = nullptr;
 
     FindThreadData(WindowInfo* win, TextSearchDirection direction, const WCHAR* text, bool wasModified) {
         this->win = win;
@@ -447,7 +448,7 @@ bool OnInverseSearch(WindowInfo* win, int x, int y) {
             return false;
         }
         if (err != PDFSYNCERR_SUCCESS) {
-            win->ShowNotification(_TR("Synchronization file cannot be opened"));
+            win->notifications->Show(win->hwndCanvas, _TR("Synchronization file cannot be opened"));
             return true;
         }
         gGlobalPrefs->enableTeXEnhancements = true;
@@ -463,7 +464,7 @@ bool OnInverseSearch(WindowInfo* win, int x, int y) {
     uint line, col;
     int err = dm->pdfSync->DocToSource(pageNo, pt, srcfilepath, &line, &col);
     if (err != PDFSYNCERR_SUCCESS) {
-        win->ShowNotification(_TR("No synchronization info at this position"));
+        win->notifications->Show(win->hwndCanvas, _TR("No synchronization info at this position"));
         return true;
     }
 
@@ -478,7 +479,7 @@ bool OnInverseSearch(WindowInfo* win, int x, int y) {
     }
 
     WCHAR* inverseSearch = ToWstrTemp(gGlobalPrefs->inverseSearchCmdLine);
-    WCHAR* toFree{nullptr};
+    WCHAR* toFree = nullptr;
     if (!inverseSearch) {
         // Detect a text editor and use it as the default inverse search handler for now
         inverseSearch = AutoDetectInverseSearchCommands(nullptr);
@@ -494,11 +495,13 @@ bool OnInverseSearch(WindowInfo* win, int x, int y) {
         AutoFreeWstr appDir = GetExeDir();
         AutoCloseHandle process(LaunchProcess(cmdline, appDir));
         if (!process) {
-            win->ShowNotification(
+            win->notifications->Show(
+                win->hwndCanvas,
                 _TR("Cannot start inverse search command. Please check the command line in the settings."));
         }
     } else if (gGlobalPrefs->enableTeXEnhancements) {
-        win->ShowNotification(
+        win->notifications->Show(
+            win->hwndCanvas,
             _TR("Cannot start inverse search command. Please check the command line in the settings."));
     }
 
@@ -547,13 +550,13 @@ void ShowForwardSearchResult(WindowInfo* win, const WCHAR* fileName, uint line, 
 
     AutoFreeWstr buf;
     if (ret == PDFSYNCERR_SYNCFILE_NOTFOUND) {
-        win->ShowNotification(_TR("No synchronization file found"));
+        win->notifications->Show(win->hwndCanvas, _TR("No synchronization file found"));
     } else if (ret == PDFSYNCERR_SYNCFILE_CANNOT_BE_OPENED) {
-        win->ShowNotification(_TR("Synchronization file cannot be opened"));
+        win->notifications->Show(win->hwndCanvas, _TR("Synchronization file cannot be opened"));
     } else if (ret == PDFSYNCERR_INVALID_PAGE_NUMBER) {
         buf.Set(str::Format(_TR("Page number %u inexistant"), page));
     } else if (ret == PDFSYNCERR_NO_SYNC_AT_LOCATION) {
-        win->ShowNotification(_TR("No synchronization info at this position"));
+        win->notifications->Show(win->hwndCanvas, _TR("No synchronization info at this position"));
     } else if (ret == PDFSYNCERR_UNKNOWN_SOURCEFILE) {
         buf.Set(str::Format(_TR("Unknown source file (%s)"), fileName));
     } else if (ret == PDFSYNCERR_NORECORD_IN_SOURCEFILE) {
@@ -564,7 +567,7 @@ void ShowForwardSearchResult(WindowInfo* win, const WCHAR* fileName, uint line, 
         buf.Set(str::Format(_TR("No result found around line %u in file %s"), line, fileName));
     }
     if (buf) {
-        win->ShowNotification(buf);
+        win->notifications->Show(win->hwndCanvas, buf);
     }
 }
 
@@ -732,6 +735,11 @@ static const WCHAR* HandleOpenCmd(const WCHAR* cmd, DDEACK& ack) {
         win = FindWindowInfoByFile(pdfFile, focusTab);
     }
     if (newWindow || !win) {
+        // https://github.com/sumatrapdfreader/sumatrapdf/issues/2315
+        // open in the last active window
+        if (win == nullptr) {
+            win = FindWindowInfoByHwnd(gLastActiveFrameHwnd);
+        }
         LoadArgs args(pdfFile, win);
         win = LoadDocument(args);
     } else if (!win->IsDocLoaded()) {
@@ -922,7 +930,7 @@ LRESULT OnDDExecute(HWND hwnd, WPARAM wp, LPARAM lp) {
         return 0;
     }
 
-    DDEACK ack = {0};
+    DDEACK ack{};
     LPVOID command = GlobalLock((HGLOBAL)hi);
     if (!command) {
         return 0;
@@ -959,7 +967,7 @@ LRESULT OnCopyData(__unused HWND hwnd, WPARAM wp, LPARAM lp) {
         return FALSE;
     }
 
-    DDEACK ack = {0};
+    DDEACK ack{};
     HandleDdeCmds(hwnd, cmd, ack);
     return ack.fAck ? TRUE : FALSE;
 }

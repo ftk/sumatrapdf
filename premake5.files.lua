@@ -493,6 +493,7 @@ function sumatrapdf_files()
     "CanvasAboutUI.*",
     "ChmModel.*",
     "Commands.*",
+    "CommandPalette.*",
     "Controller.h",
     "CrashHandler.*",
     "DisplayModel.*",
@@ -639,7 +640,9 @@ function utils_files()
     "windrawlib.*",
     "ZipUtil.*",
   })
+end
 
+function wingui_files()
   files_in_dir("src/wingui", {
     "*.h",
     "*.cpp",

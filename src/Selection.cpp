@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 #include "utils/BaseUtil.h"
@@ -8,7 +8,8 @@
 #include "utils/Dpi.h"
 #include "utils/WinUtil.h"
 
-#include "wingui/TreeModel.h"
+#include "wingui/UIModels.h"
+
 #include "DisplayMode.h"
 #include "Controller.h"
 #include "EngineBase.h"
@@ -311,7 +312,7 @@ void CopySelectionToClipboard(WindowInfo* win) {
     WCHAR* selText = nullptr;
     bool isTextOnlySelectionOut = false;
     if (!gDisableDocumentRestrictions && (dm && !dm->GetEngine()->AllowsCopyingText())) {
-        win->ShowNotification(_TR("Copying text was denied (copying as image only)"));
+        win->notifications->Show(win->hwndCanvas, _TR("Copying text was denied (copying as image only)"));
     } else {
         selText = GetSelectedText(tab, L"\r\n", isTextOnlySelectionOut);
     }
@@ -346,7 +347,7 @@ void OnSelectAll(WindowInfo* win, bool textOnly) {
     }
 
     if (IsFocused(win->hwndFindBox) || IsFocused(win->hwndPageBox)) {
-        Edit_SelectAll(GetFocus());
+        EditSelectAll(GetFocus());
         return;
     }
 

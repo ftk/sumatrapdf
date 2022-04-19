@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 #include "utils/BaseUtil.h"
@@ -171,7 +171,7 @@ void* PoolAllocator::Realloc(void*, size_t) {
 }
 
 static void printSize(const char* s, size_t size) {
-    char buf[512]{0};
+    char buf[512]{};
     str::BufFmt(buf, dimof(buf), "%s%d\n", s, (int)size);
     OutputDebugStringA(buf);
 }
@@ -375,4 +375,48 @@ u32 MurmurHash2(const void* key, size_t len) {
     h ^= h >> 15;
 
     return h;
+}
+
+// variation of MurmurHash2 which deals with strings that are
+// mostly ASCII and should be treated case independently
+u32 MurmurHashWStrI(const WCHAR* str) {
+    size_t len = str::Len(str);
+    auto a = GetTempAllocator();
+    u8* data = (u8*)a->Alloc(len);
+    WCHAR c;
+    u8* dst = data;
+    while (true) {
+        c = *str++;
+        if (!c) {
+            break;
+        }
+        if (c & 0xFF80) {
+            *dst++ = 0x80;
+            continue;
+        }
+        if ('A' <= c && c <= 'Z') {
+            *dst++ = (u8)(c + 'a' - 'A');
+            continue;
+        }
+        *dst++ = (u8)c;
+    }
+    return MurmurHash2(data, len);
+}
+
+// variation of MurmurHash2 which deals with strings that are
+// mostly ASCII and should be treated case independently
+u32 MurmurHashStrI(const char* str) {
+    TempStr scopy = str::DupTemp(str);
+    size_t len = scopy.size();
+    char* dst = scopy.Get();
+    char c;
+    for (size_t i = 0; i < len; i++) {
+        c = *str++;
+        if ('A' <= c && c <= 'Z') {
+            *dst++ = (c + 'a' - 'A');
+            continue;
+        }
+        *dst++ = c;
+    }
+    return MurmurHash2(scopy.Get(), len);
 }

@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 struct LabelWithCloseWnd {
@@ -17,7 +17,7 @@ struct LabelWithCloseWnd {
     HFONT font = nullptr;
     int cmd = 0;
 
-    Rect closeBtnPos = {};
+    Rect closeBtnPos{};
     COLORREF txtCol = 0;
     COLORREF bgCol = 0;
 
@@ -27,17 +27,17 @@ struct LabelWithCloseWnd {
 };
 
 struct LabelWithCloseCtrl : public Window {
-    explicit LabelWithCloseCtrl(HWND);
+    LabelWithCloseCtrl();
     ~LabelWithCloseCtrl() override;
 
-    bool Create(const WCHAR*);
+    bool Create(HWND parent, const WCHAR*);
 
     void SetLabel(const WCHAR*);
 
     void SetPaddingXY(int x, int y);
     Size GetIdealSize() override;
 
-    Rect closeBtnPos = {};
+    Rect closeBtnPos{};
 
     // in points
     int padX = 0;

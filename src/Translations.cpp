@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 #include "utils/BaseUtil.h"
@@ -25,12 +25,12 @@ namespace trans {
 // after the user changes the language
 struct Translation {
     // index points inside allStrings;
-    u16 idxStr{0};
+    u16 idxStr = 0;
     // translation of str/origStr in gCurrLangCode
     // index points inside allTranslations
-    u16 idxTrans{0};
+    u16 idxTrans = 0;
     // translation in WCHAR*, points inside allTranslationsW
-    u16 idxTransW{0};
+    u16 idxTransW = 0;
 };
 
 struct TranslationCache {
@@ -42,15 +42,15 @@ struct TranslationCache {
     // TODO: maybe also cache str::WStr allTranslationsW
     // we currently return a temp converted string but there's a chance their
     // lifetime could survive temp allocator lifetime
-    Translation* translations{nullptr};
-    int nTranslations{0};
-    int nUntranslated{0};
+    Translation* translations = nullptr;
+    int nTranslations = 0;
+    int nUntranslated = 0;
 };
 
 // used locally, gCurrLangCode points into gLangCodes
 static const char* gCurrLangCode = nullptr;
-static int gCurrLangIdx{0};
-static TranslationCache* gTranslationCache{nullptr};
+static int gCurrLangIdx = 0;
+static TranslationCache* gTranslationCache = nullptr;
 
 static void UnescapeStringIntoStr(char* s, str::Str& str) {
     for (; *s; s++) {
@@ -184,7 +184,7 @@ static void ParseTranslationsTxt(std::string_view sv, const char* langCode) {
         c->allTranslationsW.Append(ws.Get(), ws.size() + 1);
     }
     CrashIf(nTrans != c->nTranslations);
-    if (c->nUntranslated > 0) {
+    if (c->nUntranslated > 0 && !str::Eq(langCode, "en:")) {
         logf("Untranslated strings: %d for lang '%s'\n", c->nUntranslated, langCode);
     }
 }
@@ -205,6 +205,9 @@ static Translation* FindTranslation(const char* s) {
 }
 
 const char* GetTranslationA(const char* s) {
+    if (gCurrLangIdx == 0) {
+        return s;
+    }
     Translation* trans = FindTranslation(s);
     // we don't have a translation for this string
     if (!trans || trans->idxTrans == 0) {
@@ -222,7 +225,9 @@ const WCHAR* GetTranslation(const char* s) {
         logf("GetTranslation: didn't find translation for '%s'\n", s);
         // shouldn't happen
         // ReportIf(true);
-        return ToWstrTemp(s);
+        // it's a mem leak but the contract is that those strings
+        // are not freed and survive long enough they can't be temp strings
+        return strconv::Utf8ToWstr(s);
     }
     auto idx = trans->idxTransW;
     return gTranslationCache->allTranslationsW.LendData() + idx;

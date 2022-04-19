@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 #include "utils/BaseUtil.h"
@@ -8,7 +8,8 @@
 #include "utils/StrFormat.h"
 #include "utils/ScopedWin.h"
 
-#include "wingui/TreeModel.h"
+#include "wingui/UIModels.h"
+
 #include "DisplayMode.h"
 #include "Controller.h"
 #include "EngineBase.h"
@@ -170,7 +171,7 @@ static void versioncheck_test() {
 
 static void hexstrTest() {
     u8 buf[6] = {1, 2, 33, 255, 0, 18};
-    u8 buf2[6] = {0};
+    u8 buf2[6]{};
     AutoFree s(_MemToHex(&buf));
     utassert(str::Eq(s, "010221ff0012"));
     bool ok = _HexToMem(s, &buf2);

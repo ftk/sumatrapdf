@@ -29,7 +29,7 @@ LPCOLESTR myGuid = SZ_PDF_PREVIEW_CLSID;
 
 typedef HRESULT ourDllGetClassObjectT(REFCLSID rclsid, REFIID riid, void** ppv);
 
-void _submitDebugReportIfFunc(bool, const char*) {
+void _uploadDebugReportIfFunc(bool, const char*) {
     // no-op implementation to satisfy SubmitBugReport()
 }
 
@@ -46,7 +46,7 @@ void log(const char* s) {
 constexpr const char* kPdfPreviewDllName = "PdfPreview.dll";
 
 int main(int c, char** v) {
-    GUID clsid = {0};
+    GUID clsid{};
     IIDFromString(myGuid, &clsid);
 
     if (c < 2) {
@@ -87,7 +87,7 @@ int main(int c, char** v) {
         return 5;
     }
 
-    wchar_t wfile[256] = {0};
+    wchar_t wfile[256]{};
     MultiByteToWideChar(CP_ACP, 0, v[1], -1, wfile, 256);
     r = SHCreateStreamOnFileEx(wfile, STGM_READ, 0, FALSE, NULL, &pStream);
     if (r != S_OK || !pStream) {

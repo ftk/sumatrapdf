@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 #include "utils/BaseUtil.h"
@@ -8,7 +8,8 @@
 #include "utils/GdiPlusUtil.h"
 #include "utils/WinUtil.h"
 
-#include "wingui/TreeModel.h"
+#include "wingui/UIModels.h"
+
 #include "DisplayMode.h"
 #include "Controller.h"
 #include "EngineBase.h"
@@ -27,7 +28,7 @@ static char* GetThumbnailPathTemp(const char* filePath) {
     // I'd have liked to also include the file's last modification time
     // in the fingerprint (much quicker than hashing the entire file's
     // content), but that's too expensive for files on slow drives
-    u8 digest[16]{0};
+    u8 digest[16]{};
     // TODO: why is this happening? Seen in crash reports e.g. 35043
     if (!filePath) {
         return nullptr;
@@ -74,7 +75,7 @@ void CleanUpThumbnailCache(const FileHistory& fileHistory) {
     // remove files that should not be deleted
     Vec<FileState*> list;
     fileHistory.GetFrequencyOrder(list);
-    int n{0};
+    int n = 0;
     for (auto& fs : list) {
         if (n++ > kFileHistoryMaxFrequent * 2) {
             break;

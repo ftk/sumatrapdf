@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 #include "utils/BaseUtil.h"
@@ -7,7 +7,8 @@
 #include "utils/Dpi.h"
 #include "utils/WinUtil.h"
 
-#include "wingui/TreeModel.h"
+#include "wingui/UIModels.h"
+
 #include "DisplayMode.h"
 #include "Controller.h"
 #include "EngineBase.h"
@@ -19,7 +20,6 @@
 #include "ProgressUpdateUI.h"
 #include "TextSelection.h"
 #include "TextSearch.h"
-#include "Notifications.h"
 #include "SumatraPDF.h"
 #include "WindowInfo.h"
 #include "TabInfo.h"
@@ -46,7 +46,6 @@ static int kButtonSpacingX = 4;
 
 // distance between label and edit field
 constexpr int kTextPaddingRight = 6;
-constexpr int kMinIconSize = 16;
 constexpr int kPageBoxDx = 40;
 
 struct ToolbarButtonInfo {
@@ -63,7 +62,7 @@ constexpr int CmdPageInfo = (int)CmdLast + 16;
 constexpr int CmdInfoText = (int)CmdLast + 17;
 
 static ToolbarButtonInfo gToolbarButtons[] = {
-    {TbIcon::Open, CmdOpen, _TRN("Open")},
+    {TbIcon::Open, CmdOpenFile, _TRN("Open")},
     {TbIcon::Print, CmdPrint, _TRN("Print")},
     {TbIcon::None, CmdPageInfo, nullptr}, // text box for page number + show current page / no of pages
     {TbIcon::PagePrev, CmdGoToPrevPage, _TRN("Previous Page")},
@@ -135,7 +134,7 @@ static bool IsToolbarButtonEnabled(WindowInfo* win, int buttonNo) {
 
     bool isAllowed = true;
     switch (cmdId) {
-        case CmdOpen:
+        case CmdOpenFile:
             isAllowed = HasPermission(Perm::DiskAccess);
             break;
         case CmdPrint:
@@ -148,11 +147,11 @@ static bool IsToolbarButtonEnabled(WindowInfo* win, int buttonNo) {
 
     // If no file open, only enable open button
     if (!win->IsDocLoaded()) {
-        return CmdOpen == cmdId;
+        return CmdOpenFile == cmdId;
     }
 
     switch (cmdId) {
-        case CmdOpen:
+        case CmdOpenFile:
             // opening different files isn't allowed in plugin mode
             return !gPluginMode;
 
@@ -173,7 +172,7 @@ static bool IsToolbarButtonEnabled(WindowInfo* win, int buttonNo) {
 
 static TBBUTTON TbButtonFromButtonInfo(int i) {
     auto& btInfo = gToolbarButtons[i];
-    TBBUTTON info{0};
+    TBBUTTON info{};
     info.idCommand = btInfo.cmdId;
     if (TbIsSeparator(btInfo)) {
         info.fsStyle = TBSTYLE_SEP;
@@ -351,13 +350,30 @@ static LRESULT CALLBACK WndProcFindBox(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
             Edit_SetRectNoPaint(hwnd, &r);
         }
     } else if (WM_KEYDOWN == msg) {
-        if (FrameOnKeydown(win, wp, lp, true)) {
-            return 0;
+        // TODO: if user re-binds F3 it'll not be picked up
+        // we would have to either run accelerators after
+        if (wp == VK_F3) {
+            auto searchDir = IsShiftPressed() ? TextSearchDirection::Backward : TextSearchDirection::Forward;
+            FindTextOnThread(win, searchDir, true);
+            // Note: we don't return but let default processing take place
         }
+        // TODO: here we used to call FrameOnKeydown() to make keys
+        // like pageup etc. work even when focus is in text field
+        // that no longer works because we moved most keys handling
+        // to accelerators and we don't want to process acceleratos
+        // while in edit control.
+        // We could try to manually run accelerators but only if they
+        // are virtual and don't prevent edit control from working
+        // or maybe explicitly forword built-in accelerator for
+        // white-listed shortucts but only if they were not modified by the user
     }
 
     LRESULT ret = CallWindowProc(DefWndProcFindBox, hwnd, msg, wp, lp);
 
+    // TOOD: why do we do it? re-eneable when we notice what breaks
+    // the intent seems to be "after content of edit box changed"
+    // but how does that afect state of the toolbar?
+#if 0
     switch (msg) {
         case WM_CHAR:
         case WM_PASTE:
@@ -368,6 +384,7 @@ static LRESULT CALLBACK WndProcFindBox(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
             ToolbarUpdateStateForWindow(win, false);
             break;
     }
+#endif
 
     return ret;
 }
@@ -462,24 +479,27 @@ void UpdateToolbarState(WindowInfo* win) {
     }
 }
 
-static void CreateFindBox(WindowInfo* win) {
+static void CreateFindBox(WindowInfo* win, HFONT hfont, int iconDy) {
     int findBoxDx = DpiScale(win->hwndFrame, 160);
-    int minIconSize = DpiScale(win->hwndFrame, kMinIconSize);
     HMODULE hmod = GetModuleHandleW(nullptr);
     HWND p = win->hwndToolbar;
     DWORD style = WS_VISIBLE | WS_CHILD;
-
-    HWND findBg = CreateWindowEx(WS_EX_STATICEDGE, WC_STATIC, L"", style, 0, 1, findBoxDx, minIconSize + 4, p,
-                                 (HMENU) nullptr, hmod, nullptr);
+    DWORD exStyle = WS_EX_STATICEDGE;
+    int dy = iconDy + 2;
+    Size textSize = HwndMeasureText(win->hwndFrame, L"M", hfont);
+    HWND findBg =
+        CreateWindowEx(exStyle, WC_STATIC, L"", style, 0, 1, findBoxDx, dy, p, (HMENU) nullptr, hmod, nullptr);
 
     int dx = findBoxDx - 2 * GetSystemMetrics(SM_CXEDGE);
     style = WS_VISIBLE | WS_CHILD | ES_AUTOHSCROLL;
-    HWND find = CreateWindowExW(0, WC_EDIT, L"", style, 0, 1, dx, minIconSize + 2, p, (HMENU) nullptr, hmod, nullptr);
+    dy = iconDy + DpiScale(2);
+    dy = iconDy;
+    exStyle = 0;
+    HWND find = CreateWindowExW(exStyle, WC_EDIT, L"", style, 0, 1, dx, dy, p, (HMENU) nullptr, hmod, nullptr);
 
     style = WS_VISIBLE | WS_CHILD;
     HWND label = CreateWindowExW(0, WC_STATIC, L"", style, 0, 1, 0, 0, p, (HMENU) nullptr, hmod, nullptr);
 
-    HFONT hfont = GetDefaultGuiFont();
     SetWindowFont(label, hfont, FALSE);
     SetWindowFont(find, hfont, FALSE);
 
@@ -498,12 +518,12 @@ static void CreateFindBox(WindowInfo* win) {
     win->hwndFindBg = findBg;
 }
 
-static void CreateInfoText(WindowInfo* win) {
+static void CreateInfoText(WindowInfo* win, HFONT font) {
     HMODULE hmod = GetModuleHandleW(nullptr);
     DWORD style = WS_VISIBLE | WS_CHILD;
     HWND labelInfo =
         CreateWindowExW(0, WC_STATIC, L"", style, 0, 1, 0, 0, win->hwndToolbar, (HMENU) nullptr, hmod, nullptr);
-    SetWindowFont(labelInfo, GetDefaultGuiFont(), FALSE);
+    SetWindowFont(labelInfo, font, FALSE);
 
     win->hwndTbInfoText = labelInfo;
     SetToolbarInfoText(win, L"");
@@ -548,9 +568,7 @@ static LRESULT CALLBACK WndProcPageBox(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp
             Edit_SetRectNoPaint(hwnd, &r);
         }
     } else if (WM_KEYDOWN == msg) {
-        if (FrameOnKeydown(win, wp, lp, true)) {
-            return 0;
-        }
+        // TODO: see WndProcFindBox for note on enabling accelerators here as well
     }
 
     return CallWindowProc(DefWndProcPageBox, hwnd, msg, wp, lp);
@@ -643,29 +661,29 @@ void UpdateToolbarPageText(WindowInfo* win, int pageCount, bool updateOnly) {
         RECT rTmp = ToRECT(rc);
         InvalidateRect(win->hwndToolbar, &rTmp, TRUE);
     }
+    InvalidateRect(win->hwndToolbar, nullptr, TRUE);
 }
 
-static void CreatePageBox(WindowInfo* win) {
+static void CreatePageBox(WindowInfo* win, HFONT font, int iconDy) {
     auto hwndFrame = win->hwndFrame;
     auto hwndToolbar = win->hwndToolbar;
     int boxWidth = DpiScale(hwndFrame, kPageBoxDx);
-    int minIconSize = DpiScale(hwndFrame, kMinIconSize);
     DWORD style = WS_VISIBLE | WS_CHILD;
     auto h = GetModuleHandle(nullptr);
     int dx = boxWidth;
-    int dy = minIconSize + 4;
+    int dy = iconDy + 2;
     DWORD exStyle = WS_EX_STATICEDGE;
     HWND pageBg =
-        CreateWindowExW(exStyle, WC_STATIC, L"", style, 0, 1, dx, dy, hwndToolbar, (HMENU) nullptr, h, nullptr);
-    HWND label = CreateWindowExW(0, WC_STATIC, L"", style, 0, 1, 0, 0, hwndToolbar, (HMENU) nullptr, h, nullptr);
-    HWND total = CreateWindowExW(0, WC_STATIC, L"", style, 0, 1, 0, 0, hwndToolbar, (HMENU) nullptr, h, nullptr);
+        CreateWindowExW(exStyle, WC_STATICW, L"", style, 0, 1, dx, dy, hwndToolbar, (HMENU) nullptr, h, nullptr);
+    HWND label = CreateWindowExW(0, WC_STATICW, L"", style, 0, 1, 0, 0, hwndToolbar, (HMENU) nullptr, h, nullptr);
+    HWND total = CreateWindowExW(0, WC_STATICW, L"", style, 0, 1, 0, 0, hwndToolbar, (HMENU) nullptr, h, nullptr);
 
     style = WS_VISIBLE | WS_CHILD | ES_AUTOHSCROLL | ES_NUMBER | ES_RIGHT;
     dx = boxWidth - 2 * GetSystemMetrics(SM_CXEDGE);
-    dy = minIconSize + 2;
-    HWND page = CreateWindowExW(0, WC_EDIT, L"0", style, 0, 1, dx, dy, hwndToolbar, (HMENU) nullptr, h, nullptr);
+    dy = iconDy;
+    exStyle = 0;
+    HWND page = CreateWindowExW(exStyle, WC_EDIT, L"0", style, 0, 1, dx, dy, hwndToolbar, (HMENU) nullptr, h, nullptr);
 
-    auto font = GetDefaultGuiFont();
     SetWindowFont(label, font, FALSE);
     SetWindowFont(page, font, FALSE);
     SetWindowFont(total, font, FALSE);
@@ -694,6 +712,8 @@ void LogBitmapInfo(HBITMAP hbmp) {
     }
 }
 
+constexpr int kDefaultIconSize = 18;
+
 // https://docs.microsoft.com/en-us/windows/win32/controls/toolbar-control-reference
 void CreateToolbar(WindowInfo* win) {
     kButtonSpacingX = 0;
@@ -707,12 +727,19 @@ void CreateToolbar(WindowInfo* win) {
     win->hwndToolbar = hwndToolbar;
     SendMessageW(hwndToolbar, TB_BUTTONSTRUCTSIZE, (WPARAM)sizeof(TBBUTTON), 0);
 
-    int dx = DpiScale(18);
+    // we call it ToolbarSize for users, but it's really size of the icon
+    // toolbar size is iconSize + padding (seems to be 6)
+    int iconSize = gGlobalPrefs->toolbarSize;
+    if (iconSize == kDefaultIconSize) {
+        // scale if default size
+        iconSize = DpiScale(hwndParent, iconSize);
+    }
     // icon sizes must be multiple of 4 or else they are sheared
     // TODO: I must be doing something wrong, any size should be ok
     // it might be about size of buttons / bitmaps
-    dx = RoundUp(dx, 4);
-    // this doesn't seem to be required and doesn't help with wierd sizes like 22
+    iconSize = RoundUp(iconSize, 4);
+    int dx = iconSize;
+    // this doesn't seem to be required and doesn't help with weird sizes like 22
     // but the docs say to do it
     SendMessage(hwndToolbar, TB_SETBITMAPSIZE, 0, (LPARAM)MAKELONG(dx, dx));
 
@@ -794,9 +821,16 @@ void CreateToolbar(WindowInfo* win) {
 
     SetWindowPos(win->hwndReBar, nullptr, 0, 0, 0, 0, SWP_NOZORDER);
 
-    CreatePageBox(win);
-    CreateFindBox(win);
-    CreateInfoText(win);
+    int defFontSize = GetSizeOfDefaultGuiFont();
+    // 18 was the default toolbar size, we want to scale the fonts in proportion
+    int newSize = (defFontSize * iconSize) / kDefaultIconSize;
+    auto font = GetDefaultGuiFontOfSize(newSize);
+
+    CreatePageBox(win, font, iconSize);
+    CreateFindBox(win, font, iconSize);
+    CreateInfoText(win, font);
+
+    // TODO: leaking font
 
     UpdateToolbarPageText(win, -1);
     UpdateToolbarFindText(win);

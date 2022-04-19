@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 #include "utils/BaseUtil.h"
@@ -56,34 +56,34 @@ TODO:
 // Some people use overlapped.hEvent to store data but I'm playing it safe.
 struct OverlappedEx {
     OVERLAPPED overlapped{};
-    void* data{nullptr};
+    void* data = nullptr;
 };
 
 // info needed to detect that a file has changed
 struct FileWatcherState {
-    FILETIME time{0};
-    i64 size{0};
+    FILETIME time = 0;
+    i64 size = 0;
 };
 
 struct WatchedDir {
-    WatchedDir* next{nullptr};
-    const WCHAR* dirPath{nullptr};
-    HANDLE hDir{nullptr};
-    bool startMonitoring{true};
+    WatchedDir* next = nullptr;
+    const WCHAR* dirPath = nullptr;
+    HANDLE hDir = nullptr;
+    bool startMonitoring = true;
     OverlappedEx overlapped;
-    char buf[8 * 1024]{0};
+    char buf[8 * 1024]{};
 };
 
 struct WatchedFile {
-    WatchedFile* next{nullptr};
-    WatchedDir* watchedDir{nullptr};
-    const WCHAR* filePath{nullptr};
+    WatchedFile* next = nullptr;
+    WatchedDir* watchedDir = nullptr;
+    const WCHAR* filePath = nullptr;
     std::function<void()> onFileChangedCb;
 
     // if true, the file is on a network drive and we have
     // to check if it changed manually, by periodically checking
     // file state for changes
-    bool isManualCheck{false};
+    bool isManualCheck = false;
     FileWatcherState fileState;
 };
 

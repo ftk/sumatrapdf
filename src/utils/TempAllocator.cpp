@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 #include "utils/BaseUtil.h"
@@ -15,7 +15,7 @@ to free memory used by allocator.
 A safe place to call it is inside message windows loop.
 */
 
-thread_local static PoolAllocator* gTempAllocator{nullptr};
+thread_local static PoolAllocator* gTempAllocator = nullptr;
 
 // forbid inlinining to not blow out the size of callers
 NO_INLINE Allocator* GetTempAllocator() {

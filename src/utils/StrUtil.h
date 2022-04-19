@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 // note: include BaseUtil.h instead of including directly
@@ -68,6 +68,7 @@ bool StartsWith(std::string_view s, const char* prefix);
 ByteSlice ToSpan(const char* s);
 
 bool Eq(const WCHAR*, const WCHAR*);
+bool Eq(std::wstring_view s1, const WCHAR* s2);
 bool EqI(const WCHAR*, const WCHAR*);
 bool EqIS(const WCHAR*, const WCHAR*);
 bool EqN(const WCHAR*, const WCHAR*, size_t);
@@ -103,6 +104,7 @@ const char* Find(const char* str, const char* find);
 const char* FindI(const char* str, const char* find);
 
 bool Contains(std::string_view s, const char* txt);
+bool ContainsI(std::string_view s, const char* txt);
 
 bool BufFmtV(char* buf, size_t bufCchSize, const char* fmt, va_list args);
 bool BufFmt(char* buf, size_t bufCchSize, const char* fmt, ...);
@@ -174,14 +176,17 @@ WCHAR* GetFileName(const WCHAR* url);
 
 } // namespace url
 
-namespace seqstrings {
-char* SkipStr(char* s);
-const char* SkipStr(const char* s);
-int StrToIdx(const char* strs, const char* toFind);
-int StrToIdxIS(const char* strs, const char* toFind);
-const char* IdxToStr(const char* strs, int idx);
+using SeqStrings = const char*;
 
-int StrToIdx(const char* strs, const WCHAR* toFind);
+namespace seqstrings {
+
+void Next(const char*& s);
+void Next(const char*& s, int& idx);
+int StrToIdx(SeqStrings strs, const char* toFind);
+int StrToIdxIS(SeqStrings strs, const char* toFind);
+const char* IdxToStr(SeqStrings strs, int idx);
+
+int StrToIdx(SeqStrings strs, const WCHAR* toFind);
 const WCHAR* IdxToStr(const WCHAR* strs, int idx);
 } // namespace seqstrings
 
@@ -191,14 +196,14 @@ const WCHAR* IdxToStr(const WCHAR* strs, int idx);
 namespace str {
 struct Str {
     // allocator is not owned by Vec and must outlive it
-    Allocator* allocator{nullptr};
+    Allocator* allocator = nullptr;
     // TODO: to save space (8 bytes), combine els and buf?
-    char* els{nullptr};
-    u32 len{0};
-    u32 cap{0};
+    char* els = nullptr;
+    u32 len = 0;
+    u32 cap = 0;
     char buf[32];
 
-    int nReallocs{0};
+    int nReallocs = 0;
 
     static constexpr size_t kBufChars = dimof(buf);
 
@@ -268,10 +273,10 @@ bool Replace(Str& s, const char* toReplace, const char* replaceWith);
 
 struct WStr {
     // allocator is not owned by Vec and must outlive it
-    Allocator* allocator{nullptr};
-    WCHAR* els{nullptr};
-    u32 len{0};
-    u32 cap{0};
+    Allocator* allocator = nullptr;
+    WCHAR* els = nullptr;
+    u32 len = 0;
+    u32 cap = 0;
     WCHAR buf[32];
 
     static constexpr size_t kBufChars = dimof(buf);
@@ -339,3 +344,257 @@ bool Replace(WStr& s, const WCHAR* toReplace, const WCHAR* replaceWith);
 } // namespace str
 
 ByteSlice ToSpanU8(std::string_view sv);
+
+// TOOD: smarter WStrVec class which uses str::Wstr for the buffer
+// and stores str::wstring_view in an array
+
+// WStrVec owns the strings in the list
+class WStrVec : public Vec<WCHAR*> {
+  public:
+    WStrVec() = default;
+    WStrVec(const WStrVec& other) : Vec(other) {
+        // make sure not to share string pointers between StrVecs
+        for (size_t i = 0; i < len; i++) {
+            if (at(i)) {
+                at(i) = str::Dup(at(i));
+            }
+        }
+    }
+    ~WStrVec() {
+        FreeMembers();
+    }
+
+    WStrVec& operator=(const WStrVec& other) {
+        if (this == &other) {
+            return *this;
+        }
+
+        FreeMembers();
+        Vec::operator=(other);
+        for (size_t i = 0; i < other.len; i++) {
+            if (at(i)) {
+                at(i) = str::Dup(at(i));
+            }
+        }
+        return *this;
+    }
+
+    void Reset() {
+        FreeMembers();
+    }
+
+    WCHAR* Join(const WCHAR* joint = nullptr) {
+        str::WStr tmp(256);
+        size_t jointLen = str::Len(joint);
+        for (size_t i = 0; i < len; i++) {
+            WCHAR* s = at(i);
+            if (i > 0 && jointLen > 0) {
+                tmp.Append(joint, jointLen);
+            }
+            tmp.Append(s);
+        }
+        return tmp.StealData();
+    }
+
+    int Find(const WCHAR* s, int startAt = 0) const {
+        for (int i = startAt; i < (int)len; i++) {
+            WCHAR* item = at(i);
+            if (str::Eq(s, item)) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    bool Contains(const WCHAR* s) const {
+        return -1 != Find(s);
+    }
+
+    int FindI(const WCHAR* s, size_t startAt = 0) const {
+        for (size_t i = startAt; i < len; i++) {
+            WCHAR* item = at(i);
+            if (str::EqI(s, item)) {
+                return (int)i;
+            }
+        }
+        return -1;
+    }
+
+    /* splits a string into several substrings, separated by the separator
+       (optionally collapsing several consecutive separators into one);
+       e.g. splitting "a,b,,c," by "," results in the list "a", "b", "", "c", ""
+       (resp. "a", "b", "c" if separators are collapsed) */
+    size_t Split(const WCHAR* s, const WCHAR* separator, bool collapse = false) {
+        size_t start = len;
+        const WCHAR* next;
+
+        while ((next = str::Find(s, separator)) != nullptr) {
+            if (!collapse || next > s) {
+                Append(str::Dup(s, next - s));
+            }
+            s = next + str::Len(separator);
+        }
+        if (!collapse || *s) {
+            Append(str::Dup(s));
+        }
+
+        return len - start;
+    }
+
+    void Sort() {
+        Vec::Sort(cmpAscii);
+    }
+    void SortNatural() {
+        Vec::Sort(cmpNatural);
+    }
+
+  private:
+    static int cmpNatural(const void* a, const void* b) {
+        return str::CmpNatural(*(const WCHAR**)a, *(const WCHAR**)b);
+    }
+
+    static int cmpAscii(const void* a, const void* b) {
+        return wcscmp(*(const WCHAR**)a, *(const WCHAR**)b);
+    }
+};
+
+// WStrList is a subset of WStrVec that's optimized for appending and searching
+// WStrList owns the strings it contains and frees them at destruction
+class WStrList {
+    struct Item {
+        WCHAR* string = nullptr;
+        u32 hash = 0;
+    };
+
+    Vec<Item> items;
+    size_t count = 0;
+    Allocator* allocator;
+
+  public:
+    explicit WStrList(size_t capHint = 0, Allocator* allocator = nullptr) : items(capHint, allocator) {
+        this->allocator = allocator;
+    }
+
+    ~WStrList() {
+        for (Item& item : items) {
+            Allocator::Free(allocator, item.string);
+        }
+    }
+
+    [[nodiscard]] const WCHAR* at(size_t idx) const {
+        return items.at(idx).string;
+    }
+
+    [[nodiscard]] const WCHAR* Last() const {
+        return items.Last().string;
+    }
+
+    [[nodiscard]] size_t size() const {
+        return count;
+    }
+
+    // str must have been allocated by allocator and is owned by StrList
+    void Append(WCHAR* str) {
+        u32 hash = MurmurHashWStrI(str);
+        items.Append(Item{str, hash});
+        count++;
+    }
+
+    int Find(const WCHAR* str, size_t startAt = 0) const {
+        u32 hash = MurmurHashWStrI(str);
+        Item* item = items.LendData();
+        for (size_t i = startAt; i < count; i++) {
+            if (item[i].hash == hash && str::Eq(item[i].string, str)) {
+                return (int)i;
+            }
+        }
+        return -1;
+    }
+
+    int FindI(const WCHAR* str, size_t startAt = 0) const {
+        u32 hash = MurmurHashWStrI(str);
+        Item* item = items.LendData();
+        for (size_t i = startAt; i < count; i++) {
+            if (item[i].hash == hash && str::EqI(item[i].string, str)) {
+                return (int)i;
+            }
+        }
+        return -1;
+    }
+
+    bool Contains(const WCHAR* str) const {
+        return -1 != Find(str);
+    }
+};
+
+typedef bool (*StrLessFunc)(std::string_view s1, std::string_view s2);
+
+struct StrVec;
+
+struct StrVecSortedView {
+    StrVec* v; // not owned
+    Vec<u32> sortedIndex;
+    int Size() const;
+    std::string_view at(int) const;
+
+    StrVecSortedView() = default;
+    ~StrVecSortedView() = default;
+};
+
+// strings are stored linearly in strings, separated by 0
+// index is an array of indexes i.e. strings[index[2]] is
+// beginning of string at index 2
+struct StrVec {
+    str::Str strings;
+    Vec<u32> index;
+
+    StrVec() = default;
+    ~StrVec() = default;
+    void Reset();
+
+    int Size() const;
+    std::string_view at(int) const;
+
+    int Append(const char*);
+    int Find(std::string_view sv, int startAt = 0) const;
+    bool Exists(std::string_view) const;
+    int AppendIfNotExists(std::string_view);
+
+    bool GetSortedView(StrVecSortedView&, StrLessFunc lessFn = nullptr) const;
+    bool GetSortedViewNoCase(StrVecSortedView&) const;
+};
+
+typedef bool (*WStrLessFunc)(std::wstring_view s1, std::wstring_view s2);
+
+struct WStrVec2;
+
+struct WStrVecSortedView {
+    WStrVec2* v; // not owned
+    Vec<u32> sortedIndex;
+    int Size() const;
+    std::wstring_view at(int) const;
+};
+
+// same design as StrVec
+struct WStrVec2 {
+    str::WStr strings;
+    Vec<u32> index;
+
+    WStrVec2() = default;
+    ~WStrVec2() = default;
+    void Reset();
+
+    int Size() const;
+    std::wstring_view at(int) const;
+    int Append(const WCHAR*);
+    int Find(const WCHAR* s, int startAt = 0) const;
+    bool Exists(std::wstring_view) const;
+    int AppendIfNotExists(std::wstring_view);
+
+    bool GetSortedView(WStrVecSortedView&, WStrLessFunc lessFn = nullptr) const;
+    bool GetSortedViewNoCase(WStrVecSortedView&) const;
+
+    // TODO: remove, only for compat
+    size_t size() const;
+    // TODO: rename to Index()
+};

@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 #include "utils/BaseUtil.h"
@@ -11,7 +11,8 @@
 #include "utils/ScopedWin.h"
 #include "utils/WinUtil.h"
 
-#include "wingui/TreeModel.h"
+#include "wingui/UIModels.h"
+
 #include "DisplayMode.h"
 #include "Controller.h"
 #include "EngineBase.h"
@@ -279,7 +280,7 @@ bool ChmFile::Load(const char* fileNameA) {
     }
 
     uint fileCodepage = codepage;
-    char header[24] = {0};
+    char header[24]{};
     int n = file::ReadN(fileName, header, sizeof(header));
     if (n < (int)sizeof(header)) {
         ByteReader r(header, sizeof(header));

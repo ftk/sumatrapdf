@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 #include "utils/BaseUtil.h"
@@ -8,8 +8,8 @@
 #include "utils/UtAssert.h"
 
 struct JsonValue {
-    const char* path{nullptr};
-    const char* value{nullptr};
+    const char* path = nullptr;
+    const char* value = nullptr;
     json::Type type{json::Type::String};
 
     JsonValue() = default;

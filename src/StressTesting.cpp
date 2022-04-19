@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 #include "utils/BaseUtil.h"
@@ -13,7 +13,8 @@
 #include "utils/Timer.h"
 #include "utils/WinUtil.h"
 
-#include "wingui/TreeModel.h"
+#include "wingui/UIModels.h"
+
 #include "DisplayMode.h"
 #include "Controller.h"
 #include "EngineBase.h"
@@ -436,24 +437,24 @@ a human advancing one page at a time. This is mostly to run through a large numb
 of PDFs before a release to make sure we're crash proof. */
 
 struct StressTest {
-    WindowInfo* win{nullptr};
-    LARGE_INTEGER currPageRenderTime{0};
+    WindowInfo* win = nullptr;
+    LARGE_INTEGER currPageRenderTime = {};
     Vec<int> pagesToRender;
-    int currPageNo{0};
-    int pageForSearchStart{0};
-    int filesCount{0}; // number of files processed so far
-    int timerId{0};
-    bool exitWhenDone{false};
+    int currPageNo = 0;
+    int pageForSearchStart = 0;
+    int filesCount = 0; // number of files processed so far
+    int timerId = 0;
+    bool exitWhenDone = false;
 
     SYSTEMTIME stressStartTime{};
-    int cycles{1};
+    int cycles = 1;
     Vec<PageRange> pageRanges;
     // range of files to render (files get a new index when going through several cycles)
     Vec<PageRange> fileRanges;
-    int fileIndex{0};
+    int fileIndex = 0;
 
     // owned by StressTest
-    TestFileProvider* fileProvider{nullptr};
+    TestFileProvider* fileProvider = nullptr;
 
     StressTest(WindowInfo* win, bool exitWhenDone);
     ~StressTest();
@@ -505,7 +506,7 @@ static void Finished(StressTest* st, bool success) {
         int secs = SecsSinceSystemTime(st->stressStartTime);
         AutoFreeWstr tm(FormatTime(secs));
         AutoFreeWstr s(str::Format(L"Stress test complete, rendered %d files in %s", st->filesCount, tm.Get()));
-        st->win->ShowNotification(s, NotificationOptions::Persist, NG_STRESS_TEST_SUMMARY);
+        st->win->notifications->Show(st->win->hwndCanvas, s, NotificationOptions::Persist, NG_STRESS_TEST_SUMMARY);
     }
 
     CloseWindow(st->win, st->exitWhenDone && CanCloseWindow(st->win), false);
@@ -524,7 +525,7 @@ static void Start(StressTest* st, const WCHAR* path, const WCHAR* filter, const 
     } else {
         // Note: string dev only, don't translate
         AutoFreeWstr s(str::Format(L"Path '%s' doesn't exist", path));
-        st->win->ShowNotification(s, NotificationOptions::Warning, NG_STRESS_TEST_SUMMARY);
+        st->win->notifications->Show(st->win->hwndCanvas, s, NotificationOptions::Warning, NG_STRESS_TEST_SUMMARY);
         Finished(st, false);
     }
 }
@@ -626,7 +627,7 @@ static bool OpenFile(StressTest* st, const WCHAR* fileName) {
     int secs = SecsSinceSystemTime(st->stressStartTime);
     AutoFreeWstr tm(FormatTime(secs));
     AutoFreeWstr s(str::Format(L"File %d: %s, time: %s", st->filesCount, fileName, tm.Get()));
-    st->win->ShowNotification(s, NotificationOptions::Persist, NG_STRESS_TEST_SUMMARY);
+    st->win->notifications->Show(st->win->hwndCanvas, s, NotificationOptions::Persist, NG_STRESS_TEST_SUMMARY);
 
     return true;
 }
@@ -705,7 +706,7 @@ static bool GoToNextFile(StressTest* st) {
 static bool GoToNextPage(StressTest* st) {
     double pageRenderTime = TimeSinceInMs(st->currPageRenderTime);
     AutoFreeWstr s(str::Format(L"Page %d rendered in %d ms", st->currPageNo, (int)pageRenderTime));
-    st->win->ShowNotification(s, NotificationOptions::WithTimeout, NG_STRESS_TEST_BENCHMARK);
+    st->win->notifications->Show(st->win->hwndCanvas, s, NotificationOptions::WithTimeout, NG_STRESS_TEST_BENCHMARK);
 
     if (st->pagesToRender.size() == 0) {
         if (GoToNextFile(st)) {

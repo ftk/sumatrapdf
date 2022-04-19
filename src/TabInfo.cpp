@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 #include "utils/BaseUtil.h"
@@ -7,7 +7,8 @@
 #include "utils/FileWatcher.h"
 #include "utils/WinUtil.h"
 
-#include "wingui/TreeModel.h"
+#include "wingui/UIModels.h"
+
 #include "DisplayMode.h"
 #include "Controller.h"
 #include "EngineBase.h"
@@ -16,8 +17,6 @@
 #include "GlobalPrefs.h"
 #include "ChmModel.h"
 #include "DisplayModel.h"
-#include "ProgressUpdateUI.h"
-#include "Notifications.h"
 #include "SumatraPDF.h"
 #include "WindowInfo.h"
 #include "TabInfo.h"
@@ -125,7 +124,7 @@ bool SaveDataToFile(HWND hwndParent, WCHAR* fileName, ByteSlice data) {
         return false;
     }
 
-    WCHAR dstFileName[MAX_PATH] = {0};
+    WCHAR dstFileName[MAX_PATH]{};
     if (fileName) {
         str::BufSet(dstFileName, dimof(dstFileName), fileName);
     }
@@ -137,7 +136,7 @@ bool SaveDataToFile(HWND hwndParent, WCHAR* fileName, ByteSlice data) {
     AutoFreeWstr fileFilter = str::Format(L"%s\1*.*\1", _TR("All files"));
     str::TransCharsInPlace(fileFilter, L"\1", L"\0");
 
-    OPENFILENAME ofn = {0};
+    OPENFILENAME ofn{};
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner = hwndParent;
     ofn.lpstrFile = dstFileName;

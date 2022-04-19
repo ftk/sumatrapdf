@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 #include "utils/BaseUtil.h"
@@ -339,7 +339,7 @@ Bitmap* BitmapFromDataWin(ByteSlice bmpData) {
     // TODO: more formats? webp?
     bool tryGdiplusFirst = (kindFileTiff == format) || (kindFileGif == format);
 
-    Bitmap* bmp{nullptr};
+    Bitmap* bmp = nullptr;
     if (tryGdiplusFirst) {
         bmp = DecodeWithGdiplus(bmpData);
         ;
@@ -500,7 +500,7 @@ Size BitmapSizeFromData(ByteSlice d) {
 }
 
 CLSID GetEncoderClsid(const WCHAR* format) {
-    CLSID null = {0};
+    CLSID null{};
     uint numEncoders, size;
     Status ok = Gdiplus::GetImageEncodersSize(&numEncoders, &size);
     if (ok != Ok || 0 == size) {

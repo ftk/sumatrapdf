@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 #include "utils/BaseUtil.h"
@@ -6,7 +6,6 @@
 #include "utils/Dpi.h"
 #include "utils/WinUtil.h"
 
-#include "wingui/WinGui.h"
 #include "wingui/Layout.h"
 #include "wingui/Window.h"
 #include "wingui/TabsCtrl.h"
@@ -104,7 +103,7 @@ static HWND CreateTooltipForRect(HWND parent, const WCHAR* s, RECT& r) {
 
     SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 
-    TOOLINFOW ti = {0};
+    TOOLINFOW ti{};
     ti.cbSize = sizeof(TOOLINFO);
     ti.uFlags = TTF_SUBCLASS;
     ti.hwnd = parent;
@@ -490,7 +489,7 @@ void SetPos(TabsCtrl* ctrl, RECT& r) {
 
 Kind kindTabs = "tabs";
 
-TabsCtrl2::TabsCtrl2(HWND p) : WindowBase(p) {
+TabsCtrl2::TabsCtrl2() {
     dwStyle = WS_CHILD | WS_CLIPSIBLINGS | TCS_FOCUSNEVER | TCS_FIXEDWIDTH | TCS_FORCELABELLEFT | WS_VISIBLE;
     winClass = WC_TABCONTROLW;
     kind = kindTabs;
@@ -511,11 +510,11 @@ static void Handle_WM_NOTIFY(void* user, WndEvent* ev) {
     }
 }
 
-bool TabsCtrl2::Create() {
+bool TabsCtrl2::Create(HWND parent) {
     if (createToolTipsHwnd) {
         dwStyle |= TCS_TOOLTIPS;
     }
-    bool ok = WindowBase::Create();
+    bool ok = WindowBase::Create(parent);
     if (!ok) {
         return false;
     }
@@ -624,7 +623,7 @@ WCHAR* TabsCtrl2::GetTabText(int idx) {
     CrashIf(idx < 0);
     CrashIf(idx >= GetTabCount());
 
-    WCHAR buf[512]{0};
+    WCHAR buf[512]{};
     TCITEMW item{0};
     item.mask = TCIF_TEXT;
     item.pszText = buf;

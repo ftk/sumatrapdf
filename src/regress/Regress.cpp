@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 /*
@@ -28,7 +28,8 @@ To write new regression test:
 #include "mui/Mui.h"
 #include "utils/WinUtil.h"
 
-#include "wingui/TreeModel.h"
+#include "wingui/UIModels.h"
+
 #include "DisplayMode.h"
 #include "Controller.h"
 #include "EngineBase.h"
@@ -88,7 +89,7 @@ static HANDLE gDumpThread = nullptr;
 static bool gCrashed = false;
 
 static MINIDUMP_EXCEPTION_INFORMATION gMei{0};
-static LPTOP_LEVEL_EXCEPTION_FILTER gPrevExceptionFilter{nullptr};
+static LPTOP_LEVEL_EXCEPTION_FILTER gPrevExceptionFilter = nullptr;
 
 static DWORD WINAPI CrashDumpThread(__unused LPVOID data) {
     WaitForSingleObject(gDumpEvent, INFINITE);

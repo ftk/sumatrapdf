@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 // TODO: not quite happy how those functions are split among
@@ -48,15 +48,15 @@ extern const char* gAnnotationTextIcons;
 struct Annotation {
     // common to both smx and pdf
     AnnotationType type{AnnotationType::Unknown};
-    int pageNo{-1};
+    int pageNo = -1;
 
     // either new annotation or has been modified
-    bool isChanged{false};
+    bool isChanged = false;
     // deleted are not shown but can be undeleted
-    bool isDeleted{false};
+    bool isDeleted = false;
 
-    EngineMupdf* engine{nullptr};
-    pdf_annot* pdfannot{nullptr};
+    EngineMupdf* engine = nullptr;
+    pdf_annot* pdfannot = nullptr;
 
     Annotation() = default;
     ~Annotation() = default;

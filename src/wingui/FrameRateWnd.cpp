@@ -1,4 +1,4 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 // SetWindowSubclass, RemoveWindowSubclass and DefSubclassProc require the WinXP SDK
@@ -129,7 +129,7 @@ static void RegisterFrameRateWndClass() {
         // already registered
         return;
     }
-    WNDCLASSEX wcex = {};
+    WNDCLASSEX wcex{};
     FillWndClassEx(wcex, FRAME_RATE_CLASS_NAME, WndProcFrameRate);
     atom = RegisterClassEx(&wcex);
     CrashIf(!atom);

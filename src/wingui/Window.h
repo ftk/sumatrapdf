@@ -1,5 +1,5 @@
 
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 struct WindowBase;
@@ -133,7 +133,7 @@ using DropFilesHandler = std::function<void(DropFilesEvent*)>;
 struct WindowBase;
 
 struct WindowBase : public ILayout {
-    Kind kind{nullptr};
+    Kind kind = nullptr;
 
     Insets insets{};
     Size childSize{};
@@ -144,59 +144,57 @@ struct WindowBase : public ILayout {
 
     // either a custom class that we registered or
     // a win32 control class. Assumed static so not freed
-    const WCHAR* winClass{nullptr};
+    const WCHAR* winClass = nullptr;
 
-    HWND parent{nullptr};
-    Point initialPos{-1, -1};
-    Size initialSize{0, 0};
-    DWORD dwStyle{0};
-    DWORD dwExStyle{0};
-    HFONT hfont{nullptr}; // TODO: this should be abstract Font description
+    Point initialPos = {-1, -1};
+    Size initialSize = {0, 0};
+    DWORD dwStyle = 0;
+    DWORD dwExStyle = 0;
+    HFONT hfont = nullptr; // TODO: this should be abstract Font description
 
     // those tweak WNDCLASSEX for RegisterClass() class
-    HICON hIcon{nullptr};
-    HICON hIconSm{nullptr};
-    LPCWSTR lpszMenuName{nullptr};
+    HICON hIcon = nullptr;
+    HICON hIconSm = nullptr;
+    LPCWSTR lpszMenuName = nullptr;
 
-    int ctrlID{0};
+    int ctrlID = 0;
 
     // called at start of windows proc to allow intercepting messages
     MsgFilter msgFilter;
 
     // allow handling WM_CONTEXTMENU. Must be set before Create()
-    ContextMenuHandler onContextMenu{nullptr};
+    ContextMenuHandler onContextMenu = nullptr;
     // allow handling WM_SIZE
-    SizeHandler onSize{nullptr};
+    SizeHandler onSize = nullptr;
     // for WM_COMMAND
-    WmCommandHandler onWmCommand{nullptr};
+    WmCommandHandler onWmCommand = nullptr;
     // for WM_NCDESTROY
-    DestroyHandler onDestroy{nullptr};
+    DestroyHandler onDestroy = nullptr;
     // for WM_CLOSE
-    CloseHandler onClose{nullptr};
+    CloseHandler onClose = nullptr;
     // for WM_KEYDOWN / WM_KEYUP
-    KeyHandler onKeyDownUp{nullptr};
+    KeyHandler onKeyDownUp = nullptr;
     // for WM_CHAR
-    CharHandler onChar{nullptr};
+    CharHandler onChar = nullptr;
     // for WM_MOUSEWHEEL and WM_MOUSEHWHEEL
-    MouseWheelHandler onMouseWheel{nullptr};
+    MouseWheelHandler onMouseWheel = nullptr;
     // for WM_DROPFILES
     // when set after Create() must also call DragAcceptFiles(hwnd, TRUE);
-    DropFilesHandler onDropFiles{nullptr};
+    DropFilesHandler onDropFiles = nullptr;
 
-    COLORREF textColor{ColorUnset};
-    COLORREF backgroundColor{ColorUnset};
-    HBRUSH backgroundColorBrush{nullptr};
+    COLORREF textColor = ColorUnset;
+    COLORREF backgroundColor = ColorUnset;
+    HBRUSH backgroundColorBrush = nullptr;
 
     str::Str text;
 
-    HWND hwnd{nullptr};
-    UINT_PTR subclassId{0};
+    HWND hwnd = nullptr;
+    UINT_PTR subclassId = 0;
 
-    WindowBase() = default;
-    explicit WindowBase(HWND p);
+    WindowBase();
     ~WindowBase() override;
 
-    virtual bool Create();
+    virtual bool Create(HWND parent);
     virtual Size GetIdealSize();
 
     virtual void WndProc(WndEvent*);
@@ -255,7 +253,7 @@ struct Window : WindowBase {
     Window();
     ~Window() override;
 
-    bool Create() override;
+    bool Create(HWND parent) override;
 
     void SetTitle(std::string_view);
 
@@ -269,3 +267,6 @@ void PositionCloseTo(WindowBase* w, HWND hwnd);
 int GetNextCtrlID();
 HWND GetCurrentModelessDialog();
 void SetCurrentModelessDialog(HWND);
+
+const char* GetWinMessageName(UINT msg);
+void DbgLogMsg(const char* prefix, HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);

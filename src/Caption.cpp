@@ -1,11 +1,10 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: GPLv3 */
 
 #include "utils/BaseUtil.h"
 #include "utils/WinDynCalls.h"
 #include "utils/WinUtil.h"
 
-#include "wingui/WinGui.h"
 #include "wingui/Layout.h"
 #include "wingui/Window.h"
 #include "wingui/TabsCtrl.h"
@@ -14,7 +13,6 @@
 #include "SettingsStructs.h"
 #include "AppColors.h"
 #include "ProgressUpdateUI.h"
-#include "Notifications.h"
 #include "SumatraPDF.h"
 #include "WindowInfo.h"
 #include "Caption.h"
@@ -81,7 +79,7 @@ struct ButtonInfo {
     bool highlighted = false;
     bool inactive = false;
     // form the inner rectangle where the button image is drawn
-    RECT margins = {0};
+    RECT margins{};
 
     ButtonInfo() = default;
 };
@@ -650,7 +648,7 @@ LRESULT CustomCaptionFrameProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, bool* 
     if (dwm::IsCompositionEnabled()) {
         // Pass the messages to DwmDefWindowProc first. It serves the hit testing for the buttons.
         LRESULT res;
-        if (dwm::DefWindowProc_(hwnd, msg, wp, lp, &res)) {
+        if (dwm::DefaultWindowProc(hwnd, msg, wp, lp, &res)) {
             *callDef = false;
             return res;
         }
@@ -916,7 +914,7 @@ static void MenuBarAsPopupMenu(WindowInfo* win, int x, int y) {
     }
     HMENU popup = CreatePopupMenu();
 
-    MENUITEMINFO mii = {0};
+    MENUITEMINFO mii{};
     mii.cbSize = sizeof(MENUITEMINFO);
     mii.fMask = MIIM_SUBMENU | MIIM_STRING;
     for (int i = 0; i < count; i++) {

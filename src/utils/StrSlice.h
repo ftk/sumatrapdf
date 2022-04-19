@@ -1,11 +1,11 @@
-/* Copyright 2021 the SumatraPDF project authors (see AUTHORS file).
+/* Copyright 2022 the SumatraPDF project authors (see AUTHORS file).
    License: Simplified BSD (see COPYING.BSD) */
 
 // note: include BaseUtil.h instead of including directly
 
 struct ByteSlice {
-    u8* d{nullptr};
-    size_t s{0};
+    u8* d = nullptr;
+    size_t s = 0;
 
     ByteSlice() = default;
     ~ByteSlice() = default;
@@ -54,7 +54,7 @@ struct Slice {
     char* end = nullptr;
     char* curr = nullptr;
 
-    Slice();
+    Slice() = default;
     Slice(char* s, size_t len);
     Slice(char* start, char* end);
     Slice(const Slice& other);

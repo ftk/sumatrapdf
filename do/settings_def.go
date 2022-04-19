@@ -10,6 +10,11 @@ var (
 		mkField("Dy", Int, 0, "height"),
 	}
 
+	keyboardShortcut = []*Field{
+		mkField("Cmd", String, "", "command"),
+		mkField("Key", String, "", "keyboard shortcut (e.g. Ctrl-Alt-F)"),
+	}
+
 	scrollPos = []*Field{
 		mkField("X", Float, 0, "x coordinate"),
 		mkField("Y", Float, 0, "y coordinate"),
@@ -242,6 +247,8 @@ var (
 
 		//MkField("ThemeName", String, "light", "the name of the theme to use"),
 
+		mkField("SmoothScroll", Bool, false,
+			"if true, implements smooth scrolling").setExpert(),
 		mkField("EscToExit", Bool, false,
 			"if true, Esc key closes SumatraPDF").setExpert(),
 		mkField("ReuseInstance", Bool, false,
@@ -250,6 +257,7 @@ var (
 			"if true, we use Windows system colors for background/text color. Over-rides other settings").setExpert(),
 		mkField("RestoreSession", Bool, true,
 			"if true and SessionData isn't empty, that session will be restored at startup").setExpert(),
+		mkField("ToolbarSize", Int, 18, "height of toolbar").setVersion("3.4"),
 		mkField("TabWidth", Int, 300,
 			"maximum width of a single tab"),
 		mkEmptyLine(),
@@ -306,11 +314,6 @@ var (
 			"if true, we show the toolbar at the top of the window"),
 		mkField("ShowFavorites", Bool, false,
 			"if true, we show the Favorites sidebar"),
-		mkField("AssociatedExtensions", String, nil,
-			"a list of extensions that SumatraPDF has associated itself with and will "+
-				"reassociate if a different application takes over (e.g. \".pdf .xps .epub\")"),
-		mkField("AssociateSilently", Bool, false,
-			"whether file associations should be fixed silently or only after user feedback"),
 		mkField("CheckForUpdates", Bool, true,
 			"if true, we check once a day if an update is available"),
 		mkField("VersionToSkip", String, nil,
@@ -346,6 +349,7 @@ var (
 			"if true, we show a list of frequently read documents when no document is loaded"),
 		mkField("UseTabs", Bool, true,
 			"if true, documents are opened in tabs instead of new windows").setVersion("3.0"),
+		mkArray("Shortcuts", keyboardShortcut, "custom keyboard shortcuts"),
 		mkEmptyLine(),
 
 		// file history and favorites
