@@ -29,9 +29,6 @@ extern void VecTest();
 extern void WinUtilTest();
 extern void StrFormatTest();
 
-void _uploadDebugReportIfFunc(__unused bool cond, __unused const char* condStr) {
-    // no-op implementation to satisfy SubmitBugReport()
-}
 
 int main(__unused int argc, __unused char** argv) {
     printf("Running unit tests\n");

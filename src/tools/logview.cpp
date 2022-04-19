@@ -3,9 +3,6 @@
 constexpr const WCHAR* kPipeName = L"\\\\.\\pipe\\SumatraPDFLogger";
 constexpr DWORD kBufSize = 1024 * 16;
 
-void _uploadDebugReportIfFunc(__unused bool cond, __unused const char* condStr) {
-    // no-op implementation to satisfy SubmitBugReport()
-}
 
 void log(const char* s, __unused int cb) {
     OutputDebugStringA(s);

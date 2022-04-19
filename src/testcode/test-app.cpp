@@ -48,10 +48,6 @@ static ILayout* CreateMainLayout(HWND hwnd) {
 }
 #endif
 
-void _uploadDebugReportIfFunc(__unused bool cond, __unused const char* condStr) {
-    // no-op implementation to satisfy SubmitBugReport()
-}
-
 int APIENTRY WinMain(HINSTANCE hInstance, __unused  HINSTANCE hPrevInstance, __unused  LPSTR lpCmdLine,
                      __unused  int nCmdShow) {
     // SetProcessDpiAwareness(PROCESS_SYSTEM_DPI_AWARE);
