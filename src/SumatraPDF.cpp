@@ -97,6 +97,8 @@ using std::placeholders::_1;
 #define DEFAULT_LINK_PROTOCOLS L"http,https,mailto"
 #define DEFAULT_FILE_PERCEIVED_TYPES L"audio,video,webpage"
 
+Flags* gCli = nullptr;
+
 /* if true, we're in debug mode where we show links as blue rectangle on
    the screen. Makes debugging code related to links easier. */
 #if defined(DEBUG)

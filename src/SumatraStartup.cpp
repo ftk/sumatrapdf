@@ -67,7 +67,6 @@
 #include "Tests.h"
 #include "Menu.h"
 #include "AppTools.h"
-#include "Installer.h"
 #include "SumatraConfig.h"
 #include "ExternalViewers.h"
 #include "AppColors.h"
@@ -570,45 +569,6 @@ static void UpdateGlobalPrefs(const Flags& i) {
     }
 }
 
-// we're in installer mode if the name of the executable
-// has "install" string in it e.g. SumatraPDF-installer.exe
-static bool ExeHasNameOfInstaller() {
-    auto exePath = GetExePathTemp();
-    const WCHAR* exeName = path::GetBaseNameTemp(exePath);
-    if (str::FindI(exeName, L"uninstall")) {
-        return false;
-    }
-    return str::FindI(exeName, L"install");
-}
-
-static bool ExeHasInstallerResources() {
-    HRSRC resSrc = FindResource(GetModuleHandle(nullptr), MAKEINTRESOURCEW(1), RT_RCDATA);
-    return resSrc != nullptr;
-}
-
-static bool IsInstallerAndNamedAsSuch() {
-    if (!ExeHasInstallerResources()) {
-        return false;
-    }
-    return ExeHasNameOfInstaller();
-}
-
-static bool IsOurExeInstalled() {
-    AutoFreeWstr installedDir = GetExistingInstallationDir();
-    if (!installedDir.Get()) {
-        return false;
-    }
-    AutoFreeWstr exeDir = GetExeDir();
-    return str::EqI(installedDir.Get(), exeDir.Get());
-}
-
-static bool IsInstallerButNotInstalled() {
-    if (!ExeHasInstallerResources()) {
-        return false;
-    }
-    return !IsOurExeInstalled();
-}
-
 // TODO: maybe could set font on TDN_CREATED to Consolas, to better show the message
 static HRESULT CALLBACK TaskdialogHandleLinkscallback(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam,
                                                       LONG_PTR lpRefData) {
@@ -623,132 +583,8 @@ static HRESULT CALLBACK TaskdialogHandleLinkscallback(HWND hwnd, UINT msg, WPARA
 
 // verify that libmupdf.dll matches the .exe
 static void VerifyNoLibmupdfMismatch() {
-    char* versionCheckFuncName = nullptr;
-    FARPROC addr = nullptr;
-
-    if (!ExeHasInstallerResources()) {
-        // this is not a version that needs libmupdf.dll
-        return;
-    }
-    if (gIsAsanBuild) {
-        return;
-    }
-
-    // if we can load libmupdf.dll, then it's fine too. someone extracted libmupdf.dll
-    // as well or this could be VS build I'm debugging
-    HMODULE h = LoadLibraryA("libmupdf.dll");
-    if (!IsValidHandle(h)) {
-        goto Error;
-    }
-    versionCheckFuncName = str::Join("version_check_", CURR_VERSION_MAJOR_STRA);
-    // change "3.4" => "3_4"
-    str::TransCharsInPlace(versionCheckFuncName, ".", "_");
-    addr = GetProcAddress(h, versionCheckFuncName);
-    str::Free(versionCheckFuncName);
-    if (!addr) {
-        goto Error;
-    }
-
     return;
-Error:
-    constexpr const char* corruptedInstallationConsole = R"(
-Looks like corrupted installation of SumatraPDF.
-
-Learn more at https://www.sumatrapdfreader.org/docs/Corrupted-installation
-)";
-    constexpr const char* corruptedInstallation =
-        R"(Looks like corrupted installation of SumatraPDF.
-)";
-    bool ok = RedirectIOToExistingConsole();
-    if (ok) {
-        // if we're launched from console, print help to consle window
-        printf("%s", corruptedInstallationConsole);
-    }
-
-    AutoFreeWstr title = str::Join(GetAppNameTemp(), L" installer");
-    TASKDIALOGCONFIG dialogConfig{};
-
-    DWORD flags =
-        TDF_ALLOW_DIALOG_CANCELLATION | TDF_SIZE_TO_CONTENT | TDF_ENABLE_HYPERLINKS | TDF_POSITION_RELATIVE_TO_WINDOW;
-    if (trans::IsCurrLangRtl()) {
-        flags |= TDF_RTL_LAYOUT;
-    }
-    dialogConfig.cbSize = sizeof(TASKDIALOGCONFIG);
-    dialogConfig.pszWindowTitle = title.Get();
-    dialogConfig.pszMainInstruction = ToWstrTemp(corruptedInstallation);
-    dialogConfig.pszContent =
-        LR"(Learn more at <a href="https://www.sumatrapdfreader.org/docs/Corrupted-installation">www.sumatrapdfreader.org/docs/Corrupted-installation</a>.)";
-    dialogConfig.nDefaultButton = IDOK;
-    dialogConfig.dwFlags = flags;
-    dialogConfig.cxWidth = 0;
-    dialogConfig.pfCallback = TaskdialogHandleLinkscallback;
-    dialogConfig.dwCommonButtons = TDCBF_CLOSE_BUTTON;
-    dialogConfig.pszMainIcon = TD_ERROR_ICON;
-
-    auto hr = TaskDialogIndirect(&dialogConfig, nullptr, nullptr, nullptr);
-    CrashIf(hr == E_INVALIDARG);
-    HandleRedirectedConsoleOnShutdown();
-    ::ExitProcess(1);
 }
-
-constexpr const char* kInstallerHelpTmpl = R"(${appName} installer options:
-[-s] [-d <path>] [-with-filter] [-with-preview] [-x]
-
--s
-    installs ${appName} silently (without user interaction)
--d
-    set installation directory
--with-filter
-    install search filter
--with-preview
-    install shell preview
--x
-    extracts the files, doesn't install
--log
-    writes installation log to %LOCALAPPDATA%\sumatra-install-log.txt
-)";
-
-static void ShowInstallerHelp() {
-    // Note: translation services aren't initialized at this point, so English only
-    const char* appName = ToUtf8Temp(GetAppNameTemp());
-    str::Str msg{kInstallerHelpTmpl};
-    str::Replace(msg, "${appName}", appName);
-
-    bool ok = RedirectIOToExistingConsole();
-    if (ok) {
-        // if we're launched from console, print help to consle window
-        printf("%s\n%s\n", msg.Get(), "See more at https://www.sumatrapdfreader.org/docs/Installer-cmd-line-arguments");
-        return;
-    }
-
-    AutoFreeWstr title = str::Join(GetAppNameTemp(), L" installer usage");
-    TASKDIALOGCONFIG dialogConfig{};
-
-    DWORD flags =
-        TDF_ALLOW_DIALOG_CANCELLATION | TDF_POSITION_RELATIVE_TO_WINDOW | TDF_SIZE_TO_CONTENT | TDF_ENABLE_HYPERLINKS;
-    if (trans::IsCurrLangRtl()) {
-        flags |= TDF_RTL_LAYOUT;
-    }
-    dialogConfig.cbSize = sizeof(TASKDIALOGCONFIG);
-    dialogConfig.pszWindowTitle = title.Get();
-    dialogConfig.pszMainInstruction = ToWstrTemp(msg.Get());
-    dialogConfig.pszContent =
-        LR"(<a href="https://www.sumatrapdfreader.org/docs/Installer-cmd-line-arguments">Read more on website</a>)";
-    dialogConfig.nDefaultButton = IDOK;
-    dialogConfig.dwFlags = flags;
-    dialogConfig.pfCallback = TaskdialogHandleLinkscallback;
-    dialogConfig.dwCommonButtons = TDCBF_OK_BUTTON;
-    dialogConfig.pszMainIcon = TD_INFORMATION_ICON;
-
-    auto hr = TaskDialogIndirect(&dialogConfig, nullptr, nullptr, nullptr);
-    CrashIf(hr == E_INVALIDARG);
-}
-
-// in Installer.cpp
-extern int RunInstaller();
-
-// in Uninstaller.cpp
-extern int RunUninstaller();
 
 // In release builds, we want to do fast exit and leave cleaning up (freeing memory) to the os.
 // In debug and in release asan builds, we want to cleanup ourselves in order to see leaks.
@@ -769,9 +605,6 @@ static void supressThrowFromNew() {
     std::set_new_handler(stdNewHandler);
 }
 
-static void ShowNotValidInstallerError() {
-    MessageBoxW(nullptr, L"Not a valid installer", L"Error", MB_OK | MB_ICONERROR);
-}
 
 static void ShowNoAdminErrorMessage() {
     TASKDIALOGCONFIG dialogConfig{};
@@ -947,11 +780,8 @@ int APIENTRY WinMain(HINSTANCE hInstance, __unused HINSTANCE hPrevInstance, __un
     ParseFlags(GetCommandLineW(), flags);
     gCli = &flags;
 
-    bool isInstaller = flags.install || flags.runInstallNow || IsInstallerAndNamedAsSuch();
-    bool isUninstaller = flags.uninstall;
-    bool noLogHere = isInstaller || isUninstaller;
 
-    if (flags.log && !noLogHere) {
+    if (flags.log) {
         logFilePath = GetLogFilePath();
         if (logFilePath) {
             StartLogToFile(logFilePath, true);
@@ -970,54 +800,6 @@ int APIENTRY WinMain(HINSTANCE hInstance, __unused HINSTANCE hPrevInstance, __un
         }
     }
 #endif
-
-    if (flags.showHelp && IsInstallerButNotInstalled()) {
-        ShowInstallerHelp();
-        HandleRedirectedConsoleOnShutdown();
-        return 0;
-    }
-
-    if (flags.justExtractFiles) {
-        RedirectIOToExistingConsole();
-        logf("starting ExeHasInstallerResources()\n");
-        if (!ExeHasInstallerResources()) {
-            log("this is not an installer, -x option not available\n");
-            retCode = 1;
-        } else {
-            if (!ExtractInstallerFiles()) {
-                log("failed to extract files");
-                LogLastError();
-                retCode = 1;
-            }
-        }
-        HandleRedirectedConsoleOnShutdown();
-        return retCode;
-    }
-
-    if (isInstaller) {
-        if (!ExeHasInstallerResources()) {
-            ShowNotValidInstallerError();
-            return 1;
-        }
-        retCode = RunInstaller();
-        // exit immediately. for some reason exit handlers try to
-        // pull in libmupdf.dll which we don't have access to in the installer
-        return retCode;
-    }
-
-    if (isUninstaller) {
-        retCode = RunUninstaller();
-        ::ExitProcess(retCode);
-    }
-
-    if (flags.updateSelfTo) {
-        RedirectIOToExistingConsole();
-        UpdateSelfTo(flags.updateSelfTo);
-        if (flags.exitWhenDone) {
-            fastExit = !gIsDebugBuild;
-            goto Exit;
-        }
-    }
 
     if (flags.toEpubPath) {
         RedirectIOToExistingConsole();

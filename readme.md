@@ -6,7 +6,7 @@ SumatraCBZ is a [SumatraPDF](https://github.com/sumatrapdfreader/sumatrapdf) for
 - Optimized touchscreen controls.
 - Automatically crop page margins by default.
 - Reduced memory footprint and load time for cbz, cbr, cb7 archives.
-- Removed update check and crash reporting features.
+- Removed features: update checking, crash reporting and built-in installer.
 
 ## SumatraPDF Reader
 
