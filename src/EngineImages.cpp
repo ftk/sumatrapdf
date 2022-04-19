@@ -1160,9 +1160,10 @@ bool EngineCbx::FinishLoading() {
 
     std::sort(pageFiles.begin(), pageFiles.end(), cmpArchFileInfoByName);
 
+    pages.SetSize(nFiles);
     for (int i = 0; i < nFiles; i++) {
         auto pi = new ImagePageInfo();
-        pages.Append(pi);
+        pages[i] = pi;
     }
     files = std::move(pageFiles);
     pageCount = nFiles;
@@ -1188,10 +1189,8 @@ bool EngineCbx::FinishLoading() {
         tocTree = new TocTree(realRoot);
     }
 
-    for (int i = 0; i < pageCount; i++) {
-        // actual image load will be performed in EngineCbx::GetImageData
-        images.Append({});
-    }
+    // actual image load will be performed in EngineCbx::GetImageData
+    images.SetSize(pageCount);
 
     return true;
 }
