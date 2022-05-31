@@ -169,7 +169,7 @@ var (
 			"how far this document has been scrolled (in x and y direction)").setStructName("PointF"),
 		mkField("PageNo", Int, 1,
 			"number of the last read page"),
-		mkField("Zoom", String, "fit page",
+		mkField("Zoom", String, "fit content",
 			"zoom (in %) or one of those values: fit page, fit width, fit content"),
 		mkField("Rotation", Int, 0,
 			"how far pages have been rotated as a multiple of 90 degrees"),
@@ -212,7 +212,7 @@ var (
 			"same as FileStates -> DisplayMode"),
 		mkField("PageNo", Int, 1,
 			"number of the last read page"),
-		mkField("Zoom", String, "fit page",
+		mkField("Zoom", String, "fit content",
 			"same as FileStates -> Zoom"),
 		mkField("Rotation", Int, 0,
 			"same as FileStates -> Rotation"),
@@ -291,7 +291,7 @@ var (
 			"how pages should be laid out by default, needs to be synchronized with "+
 				"DefaultDisplayMode after deserialization and before serialization").setDoc("default layout of pages. valid values: automatic, single page, facing, " +
 			"book view, continuous, continuous facing, continuous book view"),
-		mkField("DefaultZoom", String, "fit page",
+		mkField("DefaultZoom", String, "fit content",
 			"default zoom (in %) or one of those values: fit page, fit width, fit content"),
 		mkArray("Shortcuts", keyboardShortcut, "custom keyboard shortcuts"),
 		mkField("EscToExit", Bool, false,

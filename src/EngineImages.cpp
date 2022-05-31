@@ -49,7 +49,7 @@ Kind kindEngineImageDir = "engineImageDir";
 Kind kindEngineComicBooks = "engineComicBooks";
 
 // number of decoded bitmaps to cache for quicker rendering
-#define MAX_IMAGE_PAGE_CACHE 10
+#define MAX_IMAGE_PAGE_CACHE 4
 
 ///// EngineImages methods apply to all types of engines handling full-page images /////
 
@@ -148,7 +148,11 @@ RectF EngineImages::PageMediabox(int pageNo) {
     ImagePageInfo* pi = pages[n];
     RectF& mbox = pi->mediabox;
     if (mbox.IsEmpty()) {
-        mbox = LoadMediabox(pageNo);
+        EnterCriticalSection(&cacheAccess);
+        if (mbox.IsEmpty())
+            mbox = LoadMediabox(pageNo);
+        LeaveCriticalSection(&cacheAccess);
+
     }
     return mbox;
 }
@@ -162,6 +166,10 @@ RenderedBitmap* EngineImages::RenderPage(RenderPageArgs& args) {
     ImagePage* page = GetPage(pageNo);
     if (!page) {
         return nullptr;
+    }
+
+    if (pageNo+1 <= PageCount()) {
+        DropPage(GetPage(pageNo + 1), false);
     }
 
     auto timeStart = TimeGet();
@@ -376,7 +384,7 @@ void EngineImages::DropPage(ImagePage* page, bool forceRemove) {
 // Get content box for image by cropping out margins of similar color
 RectF EngineImages::PageContentBox(int pageNo, RenderTarget target) {
     // try to load bitmap for the image
-    auto page = GetPage(pageNo, true);
+    auto page = GetPage(pageNo, false);
     if (!page)
         return RectF{};
     defer {
@@ -1180,9 +1188,10 @@ bool EngineCbx::FinishLoading() {
 
     std::sort(pageFiles.begin(), pageFiles.end(), cmpArchFileInfoByName);
 
+    pages.SetSize(nFiles);
     for (int i = 0; i < nFiles; i++) {
         auto pi = new ImagePageInfo();
-        pages.Append(pi);
+        pages[i] = pi;
     }
     files = std::move(pageFiles);
     pageCount = nFiles;
@@ -1207,10 +1216,8 @@ bool EngineCbx::FinishLoading() {
         tocTree = new TocTree(realRoot);
     }
 
-    for (int i = 0; i < pageCount; i++) {
-        // actual image load will be performed in EngineCbx::GetImageData
-        images.Append({});
-    }
+    // actual image load will be performed in EngineCbx::GetImageData
+    images.SetSize(pageCount);
 
     return true;
 }
@@ -1223,6 +1230,12 @@ ByteSlice EngineCbx::GetImageData(int pageNo) {
     CrashIf((pageNo < 1) || (pageNo > PageCount()));
     if (!images[pageNo - 1].empty())
         return images[pageNo - 1];
+    // unload previous pages
+    if (pageNo > 5 && !images[pageNo - 6].empty())
+    {
+        str::Free(images[pageNo - 6]);
+        images[pageNo - 6] = {};
+    }
     // decompress image data
     size_t fileId = files[pageNo - 1]->fileId;
     return images[pageNo - 1] = cbxFile->GetFileDataById(fileId);

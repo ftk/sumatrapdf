@@ -182,3 +182,5 @@ LRESULT CALLBACK WndProcSumatraFrame(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
 void ShutdownCleanup();
 bool DocIsSupportedFileType(Kind);
 char* GetLogFilePath();
+
+void BrowseFolder(MainWindow* win, bool forward);

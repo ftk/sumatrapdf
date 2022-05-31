@@ -146,7 +146,6 @@ static bool gDontSavePrefs = false;
 static void CloseDocumentInCurrentTab(MainWindow*, bool keepUIEnabled = false, bool deleteModel = false);
 static void OnSidebarSplitterMove(SplitterMoveEvent*);
 static void OnFavSplitterMove(SplitterMoveEvent*);
-static void DownloadDebugSymbols();
 
 LoadArgs::LoadArgs(const char* fileName, MainWindow* win) {
     char* path = path::NormalizeTemp(fileName);
@@ -3139,7 +3138,7 @@ static void OnMenuOpen(MainWindow* win) {
     }
 }
 
-static void BrowseFolder(MainWindow* win, bool forward) {
+void BrowseFolder(MainWindow* win, bool forward) {
     CrashIf(win->IsAboutWindow());
     if (win->IsAboutWindow()) {
         return;
@@ -3170,6 +3169,8 @@ static void BrowseFolder(MainWindow* win, bool forward) {
     if (!files.Contains(path)) {
         files.Append(path);
     }
+    if(files.size() <= 1)
+        return;
     files.SortNatural();
 
     int index = files.Find(path);
@@ -5034,7 +5035,6 @@ static LRESULT FrameOnCommand(MainWindow* win, HWND hwnd, UINT msg, WPARAM wp, L
         } break;
 
         case CmdDebugDownloadSymbols:
-            DownloadDebugSymbols();
             break;
 
         case CmdDebugShowLinks:
@@ -5456,8 +5456,6 @@ static TempStr GetFileSizeAsStrTemp(const char* path) {
 }
 
 void GetProgramInfo(str::Str& s) {
-    s.AppendFmt("Crash file: %s\r\n", gCrashFilePath);
-
     char* exePath = GetExePathTemp();
     auto fileSizeExe = GetFileSizeAsStrTemp(exePath);
     s.AppendFmt("Exe: %s %s\r\n", exePath, fileSizeExe);
@@ -5502,61 +5500,6 @@ void GetProgramInfo(str::Str& s) {
     }
 }
 
-bool CrashHandlerCanUseNet() {
-    return HasPermission(Perm::InternetAccess);
-}
-
-void ShowCrashHandlerMessage() {
-    log("ShowCrashHandlerMessage()\n");
-    // don't show a message box in restricted use, as the user most likely won't be
-    // able to do anything about it anyway and it's up to the application provider
-    // to fix the unexpected behavior (of which for a restricted set of documents
-    // there should be much less, anyway)
-    if (!HasPermission(Perm::DiskAccess)) {
-        log("ShowCrashHandlerMessage: skipping beacuse !HasPermission(Perm::DiskAccess)\n");
-        return;
-    }
-
-#if 0
-    int res = MessageBox(nullptr, _TR("Sorry, that shouldn't have happened!\n\nPlease press 'Cancel', if you want to help us fix the cause of this crash."), _TR("SumatraPDF crashed"), MB_ICONERROR | MB_OKCANCEL | MbRtlReadingMaybe());
-    if (IDCANCEL == res) {
-        LaunchBrowser(CRASH_REPORT_URL);
-    }
-#endif
-
-    const char* msg = "We're sorry, SumatraPDF crashed.\n\nPress 'Cancel' to see crash report.";
-    uint flags = MB_ICONERROR | MB_OK | MB_OKCANCEL | MbRtlReadingMaybe();
-    flags |= MB_SETFOREGROUND | MB_TOPMOST;
-
-    int res = MessageBoxA(nullptr, msg, "SumatraPDF crashed", flags);
-    if (IDCANCEL != res) {
-        return;
-    }
-    if (!gCrashFilePath) {
-        log("ShowCrashHandlerMessage: !gCrashFilePath\n");
-        return;
-    }
-    LaunchFile(gCrashFilePath, nullptr, "open");
-    auto url = "https://www.sumatrapdfreader.org/docs/Submit-crash-report.html";
-    LaunchFile(url, nullptr, "open");
-}
-
-static void DownloadDebugSymbols() {
-    // over-ride the default symbols directory to be more useful
-    char* symDir = AppGenDataFilenameTemp("crashinfo");
-    SetSymbolsDir(symDir);
-
-    bool ok = CrashHandlerDownloadSymbols();
-    char* msg = nullptr;
-    if (ok) {
-        msg = str::Format("Downloaded symbols! to %s", symDir);
-    } else {
-        msg = str::Dup("Failed to download symbols.");
-    }
-    uint flags = MB_ICONINFORMATION | MB_OK | MbRtlReadingMaybe();
-    MessageBoxA(nullptr, msg, "Downloading symbols", flags);
-    free(msg);
-}
 
 void ShutdownCleanup() {
     gAllowedFileTypes.Reset();

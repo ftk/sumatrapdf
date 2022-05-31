@@ -254,13 +254,10 @@ inline void CrashIfFunc(bool cond) {
         CrashIfFunc(cond);          \
     } while (0)
 
-// must be defined in the app. can be no-op to disable this functionality
-void _uploadDebugReportIfFunc(bool cond, __unused const char* condStr);
 
 #define ReportIf(cond)                         \
     do {                                       \
         __analysis_assume(!(cond));            \
-        _uploadDebugReportIfFunc(cond, #cond); \
     } while (0)
 
 void* AllocZero(size_t count, size_t size);

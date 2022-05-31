@@ -1,4 +1,13 @@
-![](https://github.com/sumatrapdfreader/sumatrapdf/workflows/Build/badge.svg)
+![](https://github.com/ftk/sumatrapdf/workflows/Build/badge.svg)
+
+## SumatraCBZ
+
+SumatraCBZ is a [SumatraPDF](https://github.com/sumatrapdfreader/sumatrapdf) fork optimized for reading comic books.
+- Optimized touchscreen controls.
+- Automatically crop page margins by default.
+- Open next file in directory when trying to seek past the last page.
+- Reduced memory footprint and load time for cbz, cbr, cb7 archives.
+- Removed features: update checking, crash reporting and built-in installer.
 
 ## SumatraPDF Reader
 

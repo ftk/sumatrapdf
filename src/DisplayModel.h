@@ -132,23 +132,22 @@ struct DisplayModel : DocController {
     // access only from Search thread
     TextSearch* textSearch = nullptr;
 
-    PageInfo* GetPageInfo(int pageNo) const;
+    [[nodiscard]] PageInfo* GetPageInfo(int pageNo) const;
+    [[nodiscard]] PageInfo* GetPageDimensions(int pageNo, bool content = false) const;
 
     /* current rotation selected by user */
     int GetRotation() const;
     float GetZoomReal(int pageNo) const;
     void Relayout(float zoomVirtual, int rotation);
 
-    Rect GetViewPort() const;
-    bool IsHScrollbarVisible() const;
-    bool IsVScrollbarVisible() const;
-    bool NeedHScroll() const;
-    bool NeedVScroll() const;
-    bool CanScrollRight() const;
-    ;
-    bool CanScrollLeft() const;
-    ;
-    Size GetCanvasSize() const;
+    [[nodiscard]] Rect GetViewPort() const;
+    [[nodiscard]] bool IsHScrollbarVisible() const;
+    [[nodiscard]] bool IsVScrollbarVisible() const;
+    [[nodiscard]] bool NeedHScroll() const;
+    [[nodiscard]] bool NeedVScroll() const;
+    [[nodiscard]] bool CanScrollRight() const;
+    [[nodiscard]] bool CanScrollLeft() const;
+    [[nodiscard]] Size GetCanvasSize() const;
 
     bool PageShown(int pageNo) const;
     bool PageVisible(int pageNo) const;
