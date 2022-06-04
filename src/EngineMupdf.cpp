@@ -1277,33 +1277,45 @@ pdf_obj* PdfCopyStrDict(fz_context* ctx, pdf_document* doc, pdf_obj* dict) {
 }
 
 // Note: make sure to only call with ctxAccess
-static fz_outline* PdfLoadAttachments(fz_context* ctx, pdf_document* doc) {
-    pdf_obj* dict = pdf_load_name_tree(ctx, doc, PDF_NAME(EmbeddedFiles));
-    if (!dict) {
-        return nullptr;
-    }
-
+static fz_outline* PdfLoadAttachments(fz_context* ctx, pdf_document* doc, const char* path) {
     fz_outline root{};
-    fz_outline* curr = &root;
-    for (int i = 0; i < pdf_dict_len(ctx, dict); i++) {
-        pdf_obj* fs = pdf_dict_get_val(ctx, dict, i);
+    pdf_obj* dict;
 
-        if (!pdf_is_embedded_file(ctx, fs)) {
-            continue;
+    fz_var(root);
+    fz_var(dict);
+
+    fz_try(ctx) {
+        dict = pdf_load_name_tree(ctx, doc, PDF_NAME(EmbeddedFiles));
+        if (!dict) {
+            break;
         }
-        pdf_embedded_file_params fileParams = {};
-        pdf_get_embedded_file_params(ctx, fs, &fileParams);
-        const char* nameStr = fileParams.filename;
-        if (str::IsEmpty(nameStr)) {
-            continue;
+
+        fz_outline* curr = &root;
+        for (int i = 0; i < pdf_dict_len(ctx, dict); i++) {
+            pdf_obj* fs = pdf_dict_get_val(ctx, dict, i);
+
+            if (!pdf_is_embedded_file(ctx, fs)) {
+                continue;
+            }
+            pdf_embedded_file_params fileParams = {};
+            pdf_get_embedded_file_params(ctx, fs, &fileParams);
+            const char* nameStr = fileParams.filename;
+            if (str::IsEmpty(nameStr)) {
+                continue;
+            }
+            fz_outline* link = fz_new_outline(ctx);
+            link->title = fz_strdup(ctx, nameStr);
+            link->uri = fz_strdup(ctx, nameStr); // TODO: maybe make file:// ?
+            curr->next = link;
+            curr = link;
         }
-        fz_outline* link = fz_new_outline(ctx);
-        link->title = fz_strdup(ctx, nameStr);
-        link->uri = fz_strdup(ctx, nameStr); // TODO: maybe make file:// ?
-        curr->next = link;
-        curr = link;
     }
-    pdf_drop_obj(ctx, dict);
+    fz_always(ctx) {
+        pdf_drop_obj(ctx, dict);
+    }
+    fz_catch(ctx) {
+        logfa("PdfLoadAttachements() failed for '%s'\n", path);
+    }
     return root.next;
 }
 
@@ -1881,8 +1893,7 @@ bool EngineMupdf::LoadFromStream(fz_stream* stm, const char* nameHint, PasswordU
     float ldx = layoutA5DxPt;
     float ldy = layoutA5DyPt;
     float lfontDy = layoutFontEm;
-    char* ext = path::GetExtTemp(nameHint);
-    if (!str::EqI(ext, ".epub")) {
+    if (!str::EndsWithI(nameHint, ".epub")) {
         lfontDy = 8.f;
     }
 
@@ -2160,7 +2171,7 @@ bool EngineMupdf::FinishLoading() {
                 mbox = {};
             }
             if (fz_is_empty_rect(mbox)) {
-                fz_warn(ctx, "cannot find page size for page %d", i);
+                logfa("cannot find page size for page %d", i);
                 mbox.x0 = 0;
                 mbox.y0 = 0;
                 mbox.x1 = 612;
@@ -2191,7 +2202,7 @@ bool EngineMupdf::FinishLoading() {
             }
 
             if (fz_is_empty_rect(mbox)) {
-                fz_warn(ctx, "cannot find page size for page %d", pageNo);
+                logfa("cannot find page size (2) for page %d", pageNo);
                 mbox.x0 = 0;
                 mbox.y0 = 0;
                 mbox.x1 = 612;
@@ -2199,6 +2210,9 @@ bool EngineMupdf::FinishLoading() {
             }
             pageInfo->mediabox = ToRectF(mbox);
         }
+    }
+    if (loadPageTreeFailed) {
+        logfa("Failed to load page tree for '%s'\n", FileName());
     }
 
     fz_try(ctx) {
@@ -2209,15 +2223,10 @@ bool EngineMupdf::FinishLoading() {
         // this information is not critical and checking the
         // error might prevent loading some pdfs that would
         // otherwise get displayed
-        fz_warn(ctx, "Couldn't load outline");
+        logfa("Couldn't load outline for '%s'\n", FileName());
     }
 
-    fz_try(ctx) {
-        attachments = PdfLoadAttachments(ctx, pdfdoc);
-    }
-    fz_catch(ctx) {
-        fz_warn(ctx, "Couldn't load attachments");
-    }
+    attachments = PdfLoadAttachments(ctx, pdfdoc, FileName());
 
     pdf_obj* origInfo = nullptr;
     fz_var(origInfo);
@@ -2321,7 +2330,6 @@ TocItem* EngineMupdf::BuildTocTree(TocItem* parent, fz_outline* outline, int& id
         int pageNo = FzGetPageNo(ctx, _doc, nullptr, outline);
 
         IPageDestination* dest = nullptr;
-        Kind kind = nullptr;
         if (isAttachment) {
             dest = DestFromAttachment(this, outline);
         } else {
@@ -2836,6 +2844,8 @@ void HandleLinkMupdf(EngineMupdf* e, IPageDestination* dest, ILinkHandler* linkH
         return;
     }
 
+    ScopedCritSec cs(e->ctxAccess);
+
     float x, y;
     float zoom = 0.f; // TODO: used to have zoom but mupdf changed outline
     int pageNo = -1;
@@ -2845,7 +2855,7 @@ void HandleLinkMupdf(EngineMupdf* e, IPageDestination* dest, ILinkHandler* linkH
         pageNo = fz_page_number_from_location(e->ctx, e->_doc, loc);
     }
     fz_catch(e->ctx) {
-        fz_warn(e->ctx, "fz_resolve_link() failed, uri='%s'", uri);
+        logfa("HandleLinkMupdf: fz_resolve_link() for '%s' failed\n", uri);
     }
     if (pageNo < 0) {
         // TODO: more?
@@ -2899,7 +2909,7 @@ RenderedBitmap* EngineMupdf::GetPageImage(int pageNo, RectF rect, int imageIdx) 
     if (!pageInfo->page) {
         return nullptr;
     }
-    auto& images = pageInfo->images;
+    const auto& images = pageInfo->images;
     bool outOfBounds = imageIdx >= images.isize();
     fz_rect imgRect = images.at(imageIdx)->rect;
     bool badRect = ToRectF(imgRect) != rect;

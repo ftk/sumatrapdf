@@ -177,7 +177,6 @@ Printer* NewPrinter(char* printerName) {
         printer->papers = AllocArray<WORD>(n);
         WCHAR* paperNamesSeq = AllocArray<WCHAR>(paperNameSize * (size_t)n + 1); // +1 is "just in case"
         printer->paperSizes = AllocArray<POINT>(n);
-        printer->paperNames;
 
         DeviceCapabilitiesW(printerNameW, nullptr, DC_PAPERS, (WCHAR*)printer->papers, nullptr);
         DeviceCapabilitiesW(printerNameW, nullptr, DC_PAPERNAMES, paperNamesSeq, nullptr);
@@ -687,7 +686,7 @@ So far have tested printing from XP to
  - Lexmark Z515 inkjet, which should cover most bases.
 */
 enum { MAXPAGERANGES = 10 };
-void OnMenuPrint(MainWindow* win, bool waitForCompletion) {
+void PrintCurrentFile(MainWindow* win, bool waitForCompletion) {
     // we remember some printer settings per process
     static ScopedMem<DEVMODE> defaultDevMode;
     static PrintScaleAdv defaultScaleAdv = PrintScaleAdv::Shrink;
@@ -722,13 +721,14 @@ void OnMenuPrint(MainWindow* win, bool waitForCompletion) {
         win->AsChm()->PrintCurrentPage(showUI);
         return;
     }
-    ReportIf(!win->AsFixed());
-    if (!win->AsFixed()) {
+    DisplayModel* dm = win->AsFixed();
+    ReportIf(!dm);
+    if (!dm) {
         return;
     }
-    DisplayModel* dm = win->AsFixed();
     int rotation = dm->GetRotation();
     auto engine = dm->GetEngine();
+    int nPages = dm->PageCount();
 
 #ifndef DISABLE_DOCUMENT_RESTRICTIONS
     if (!dm->GetEngine()->AllowsPrinting()) {
@@ -768,9 +768,9 @@ void OnMenuPrint(MainWindow* win, bool waitForCompletion) {
     PRINTPAGERANGE* ppr = AllocArray<PRINTPAGERANGE>(MAXPAGERANGES);
     pdex.lpPageRanges = ppr;
     ppr->nFromPage = 1;
-    ppr->nToPage = dm->PageCount();
+    ppr->nToPage = nPages;
     pdex.nMinPage = 1;
-    pdex.nMaxPage = dm->PageCount();
+    pdex.nMaxPage = nPages;
     pdex.nStartPage = START_PAGE_GENERAL;
 
     Print_Advanced_Data advanced(PrintRangeAdv::All, defaultScaleAdv);
@@ -847,7 +847,7 @@ void OnMenuPrint(MainWindow* win, bool waitForCompletion) {
     } else if (win->currentTab->selectionOnPage && (pdex.Flags & PD_SELECTION)) {
         printSelection = true;
     } else if (!(pdex.Flags & PD_PAGENUMS)) {
-        PRINTPAGERANGE pr = {1, (DWORD)dm->PageCount()};
+        PRINTPAGERANGE pr = {1, (DWORD)nPages};
         ranges.Append(pr);
     } else {
         ReportIf(pdex.nPageRanges <= 0);
@@ -893,7 +893,7 @@ struct PaperSizeDesc {
 };
 
 // clang-format off
-static PaperSizeDesc paperSizes[] = {
+static PaperSizeDesc gPaperSizes[] = {
     // common ISO 216 formats (metric)
     {
         16.53f, 16.55f,
@@ -954,7 +954,7 @@ PaperFormat GetPaperFormatFromSizeApprox(SizeF size) {
     if (dx > dy) {
         std::swap(dx, dy);
     }
-    for (auto&& desc : paperSizes) {
+    for (const PaperSizeDesc& desc : gPaperSizes) {
         bool ok = fInRange(dx, desc.minDx, desc.maxDx) && fInRange(dy, desc.minDy, desc.maxDy);
         if (ok) {
             return desc.paperFormat;
@@ -1083,7 +1083,6 @@ static short GetPaperSourceByName(Printer* printer, const char* binName) {
 static void ApplyPrintSettings(Printer* printer, const char* settings, int pageCount, Vec<PRINTPAGERANGE>& ranges,
                                Print_Advanced_Data& advanced) {
     auto devMode = printer->devMode;
-    auto printerName = printer->name;
 
     StrVec rangeList;
     if (settings) {
@@ -1233,6 +1232,7 @@ bool PrintFile(EngineBase* engine, char* printerName, bool displayErrors, const 
         PrintData pd(engine, printer, ranges, advanced);
         ok = PrintToDevice(pd);
         if (!ok) {
+            logfa("PrintToDevice: failed\n");
             MessageBoxWarningCond(displayErrors, _TRA("Couldn't initialize printer"), _TRA("Printing problem."));
         }
     }

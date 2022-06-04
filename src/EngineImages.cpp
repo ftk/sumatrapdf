@@ -507,9 +507,8 @@ class EngineImage : public EngineImages {
     static EngineBase* CreateFromFile(const char* fileName);
     static EngineBase* CreateFromStream(IStream* stream);
 
-  protected:
     Bitmap* image = nullptr;
-    const char* fileExt = nullptr;
+    Kind imageFormat = nullptr;
 
     bool LoadSingleFile(const char* fileName);
     bool LoadFromStream(IStream* stream);
@@ -536,7 +535,7 @@ EngineBase* EngineImage::Clone() {
     EngineImage* clone = new EngineImage();
     clone->SetFileName(FileName());
     clone->defaultExt = str::Dup(defaultExt);
-    clone->fileExt = fileExt;
+    clone->imageFormat = imageFormat;
     clone->fileDPI = fileDPI;
     if (fileStream) {
         fileStream->Clone(&clone->fileStream);
@@ -554,14 +553,29 @@ bool EngineImage::LoadSingleFile(const char* path) {
     SetFileName(path);
 
     ByteSlice data = file::ReadFile(path);
-    const char* fileExtA = GfxFileExtFromData(data);
-    if (fileExtA == nullptr) {
-        Kind kind = GuessFileTypeFromName(path);
-        fileExtA = GfxFileExtFromKind(kind);
+    imageFormat = GuessFileTypeFromContent(data);
+    if (imageFormat == nullptr) {
+        imageFormat = GuessFileTypeFromName(path);
     }
-    CrashIf(fileExtA == nullptr);
-    fileExt = fileExtA;
-    str::ReplaceWithCopy(&defaultExt, path::GetExtTemp(fileExtA));
+    if (imageFormat == nullptr) {
+        logfa("EngineImage::LoadSingleFile: '%s'\n", path);
+        ReportIf(imageFormat == nullptr);
+    }
+
+    // TODO: maybe default to file extension and only use detected from content
+    // if no extension?
+    const char* fileExt = GfxFileExtFromData(data);
+    if (fileExt == nullptr) {
+        Kind kind = GuessFileTypeFromName(path);
+        fileExt = GfxFileExtFromKind(kind);
+    }
+    if (fileExt == nullptr) {
+        fileExt = path::GetExtTemp(path);
+    }
+    if (fileExt == nullptr) {
+        fileExt = "";
+    }
+    str::ReplaceWithCopy(&defaultExt, fileExt);
     image = BitmapFromData(data);
     data.Free();
     return FinishLoading();
@@ -591,6 +605,19 @@ bool EngineImage::LoadFromStream(IStream* stream) {
     return FinishLoading();
 }
 
+static bool IsMultiImage(Kind fmt) {
+    return (fmt == kindFileTiff) || (fmt == kindFileGif);
+}
+
+static void ReportIfNotMultiImage(EngineImage* e) {
+    Kind fmt = e->imageFormat;
+    if (IsMultiImage(fmt)) {
+        return;
+    }
+    logfa("EngineImage::LoadBitmapForPage: trying for non-multi image, %s, path: '%s'\n", fmt, e->FileName());
+    ReportIf(true);
+}
+
 bool EngineImage::FinishLoading() {
     if (!image || image->GetLastStatus() != Ok) {
         return false;
@@ -603,9 +630,10 @@ bool EngineImage::FinishLoading() {
     CrashIf(pages.size() != 1);
 
     // extract all frames from multi-page TIFFs and animated GIFs
-    if (str::Eq(fileExt, ".tif") || str::Eq(fileExt, ".gif")) {
-        const GUID* frameDimension = str::Eq(fileExt, ".tif") ? &FrameDimensionPage : &FrameDimensionTime;
-        int nFrames = image->GetFrameCount(frameDimension) - 1;
+    // TODO: do the same for .avif and .heic formats
+    if (IsMultiImage(imageFormat)) {
+        const GUID* dim = imageFormat == kindFileTiff ? &FrameDimensionPage : &FrameDimensionTime;
+        int nFrames = image->GetFrameCount(dim) - 1;
         for (int i = 0; i < nFrames; i++) {
             pi = new ImagePageInfo();
             pages.Append(pi);
@@ -613,8 +641,7 @@ bool EngineImage::FinishLoading() {
     }
     pageCount = pages.isize();
 
-    CrashIf(!fileExt);
-    return fileExt != nullptr;
+    return pageCount > 0;
 }
 
 // http://www.universalthread.com/ViewPageArticle.aspx?ID=831
@@ -672,15 +699,15 @@ Bitmap* EngineImage::LoadBitmapForPage(int pageNo, bool& deleteAfterUse) {
     }
 
     // extract other frames from multi-page TIFFs and animated GIFs
-    CrashIf(!str::Eq(fileExt, ".tif") && !str::Eq(fileExt, ".gif"));
-    const GUID* frameDimension = str::Eq(fileExt, ".tif") ? &FrameDimensionPage : &FrameDimensionTime;
-    uint frameCount = image->GetFrameCount(frameDimension);
+    ReportIfNotMultiImage(this);
+    const GUID* dim = imageFormat == kindFileTiff ? &FrameDimensionPage : &FrameDimensionTime;
+    uint frameCount = image->GetFrameCount(dim);
     CrashIf((unsigned int)pageNo > frameCount);
     Bitmap* frame = image->Clone(0, 0, image->GetWidth(), image->GetHeight(), PixelFormat32bppARGB);
     if (!frame) {
         return nullptr;
     }
-    Status ok = frame->SelectActiveFrame(frameDimension, pageNo - 1);
+    Status ok = frame->SelectActiveFrame(dim, pageNo - 1);
     if (ok != Ok) {
         delete frame;
         return nullptr;
@@ -701,15 +728,14 @@ RectF EngineImage::LoadMediabox(int pageNo) {
         DropPage(page, false);
         return mbox;
     }
-
-    CrashIf(!str::Eq(fileExt, ".tif") && !str::Eq(fileExt, ".gif"));
+    ReportIfNotMultiImage(this);
     RectF mbox = RectF(0, 0, (float)image->GetWidth(), (float)image->GetHeight());
     Bitmap* frame = image->Clone(0, 0, image->GetWidth(), image->GetHeight(), PixelFormat32bppARGB);
     if (!frame) {
         return mbox;
     }
-    const GUID* frameDimension = str::Eq(fileExt, ".tif") ? &FrameDimensionPage : &FrameDimensionTime;
-    Status ok = frame->SelectActiveFrame(frameDimension, pageNo - 1);
+    const GUID* dim = imageFormat == kindFileTiff ? &FrameDimensionPage : &FrameDimensionTime;
+    Status ok = frame->SelectActiveFrame(dim, pageNo - 1);
     if (Ok == ok) {
         mbox = RectF(0, 0, (float)frame->GetWidth(), (float)frame->GetHeight());
     }
@@ -767,7 +793,8 @@ static Kind imageEngineKinds[] = {
     kindFilePng, kindFileJpeg, kindFileGif,
     kindFileTiff, kindFileBmp, kindFileTga,
     kindFileJxr, kindFileHdp, kindFileWdp,
-    kindFileWebp, kindFileJp2, kindFileHeic, kindFileAvif
+    kindFileWebp, kindFileJp2, kindFileHeic,
+    kindFileAvif
 };
 // clang-format on
 
@@ -1035,7 +1062,7 @@ class EngineCbx : public EngineImages, public json::ValueVisitor {
     bool FinishLoading();
 
     ByteSlice GetImageData(int pageNo);
-    void ParseComicInfoXml(ByteSlice xmlData);
+    void ParseComicInfoXml(const ByteSlice& xmlData);
 
     // access to cbxFile must be protected after initialization (with cacheAccess)
     MultiFormatArchive* cbxFile = nullptr;
@@ -1199,7 +1226,7 @@ bool EngineCbx::FinishLoading() {
     TocItem* root = nullptr;
     TocItem* curr = nullptr;
     for (int i = 0; i < pageCount; i++) {
-        const char* fname = pageFiles[i]->name;
+        const char* fname = files[i]->name;
         const char* baseName = path::GetBaseNameTemp(fname);
         TocItem* ti = new TocItem(nullptr, baseName, i + 1);
         if (root == nullptr) {
@@ -1251,7 +1278,7 @@ static char* GetTextContent(HtmlPullParser& parser) {
 
 // extract ComicInfo.xml metadata
 // cf. http://comicrack.cyolito.com/downloads/comicrack/ComicRack/Support-Files/ComicInfoSchema.zip/
-void EngineCbx::ParseComicInfoXml(ByteSlice xmlData) {
+void EngineCbx::ParseComicInfoXml(const ByteSlice& xmlData) {
     // TODO: convert UTF-16 data and skip UTF-8 BOM
     HtmlPullParser parser(xmlData);
     HtmlToken* tok;

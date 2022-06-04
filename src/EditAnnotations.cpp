@@ -279,6 +279,9 @@ static void EnableSaveIfAnnotationsChanged(EditAnnotationsWindow* ew) {
 }
 
 static void RemoveDeletedAnnotations(Vec<Annotation*>* v) {
+    if (!v) {
+        return;
+    }
 again:
     auto n = v->isize();
     for (int i = 0; i < n; i++) {
@@ -863,7 +866,7 @@ static MainWindow* gMainWindowForRender = nullptr;
 
 // TODO: there seems to be a leak
 static void ContentsChanged(EditAnnotationsWindow* ew) {
-    auto txt = ew->editContents->GetText();
+    auto txt = ew->editContents->GetTextTemp();
     SetContents(ew->annot, txt);
     EnableSaveIfAnnotationsChanged(ew);
 

@@ -9,7 +9,7 @@ char* AppGenDataFilenameTemp(const char* fileName);
 
 void SetAppDataPath(const char* path);
 
-char* AutoDetectInverseSearchCommands(HWND);
+void AutoDetectInverseSearchCommands(StrVec&);
 
 bool ExtendedEditWndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp);
 
@@ -17,9 +17,9 @@ void EnsureAreaVisibility(Rect& rect);
 Rect GetDefaultWindowPos();
 void SaveCallstackLogs();
 
-char* FormatFileSize(i64);
+TempStr FormatFileSizeTemp(i64);
+TempStr FormatFileSizeNoTransTemp(i64);
 
-char* FormatFileSizeNoTrans(i64);
 bool LaunchFileIfExists(const char* path);
 
 bool IsValidProgramVersion(const char* txt);

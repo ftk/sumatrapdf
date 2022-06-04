@@ -1,4 +1,4 @@
-// Copyright (C) 2004-2021 Artifex Software, Inc.
+// Copyright (C) 2004-2022 Artifex Software, Inc.
 //
 // This file is part of MuPDF.
 //
@@ -583,6 +583,11 @@ fz_load_chapter_page(fz_context *ctx, fz_document *doc, int chapter, int number)
 	/* Protect modifications to the page list to cope with
 	 * destruction of pages on other threads. */
 	fz_lock(ctx, FZ_LOCK_ALLOC);
+	/* SumatraPDF: seen a crash */
+	if (doc == NULL) {
+			fz_unlock(ctx, FZ_LOCK_ALLOC);
+			return NULL;
+	}
 	for (page = doc->open; page; page = page->next)
 		if (page->chapter == chapter && page->number == number)
 		{
@@ -770,6 +775,33 @@ fz_link *fz_create_link(fz_context *ctx, fz_page *page, fz_rect bbox, const char
 	if (page->create_link == NULL)
 		fz_throw(ctx, FZ_ERROR_GENERIC, "This format of document does not support creating links");
 	return page->create_link(ctx, page, bbox, uri);
+}
+
+void fz_delete_link(fz_context *ctx, fz_page *page, fz_link *link)
+{
+	if (page == NULL || link == NULL)
+		return;
+	if (page->delete_link == NULL)
+		fz_throw(ctx, FZ_ERROR_GENERIC, "This format of document does not support deleting links");
+	page->delete_link(ctx, page, link);
+}
+
+void fz_set_link_rect(fz_context *ctx, fz_link *link, fz_rect rect)
+{
+	if (link == NULL)
+		return;
+	if (link->set_rect == NULL)
+		fz_throw(ctx, FZ_ERROR_GENERIC, "This format of document does not support updating link bounds");
+	link->set_rect(ctx, link, rect);
+}
+
+void fz_set_link_uri(fz_context *ctx, fz_link *link, const char *uri)
+{
+	if (link == NULL)
+		return;
+	if (link->set_uri == NULL)
+		fz_throw(ctx, FZ_ERROR_GENERIC, "This format of document does not support updating link uri");
+	link->set_uri(ctx, link, uri);
 }
 
 void *

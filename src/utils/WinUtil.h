@@ -64,26 +64,34 @@ bool DeleteRegValue(HKEY keySub, const char* keyName, const char* val);
 bool LoggedDeleteRegValue(HKEY keySub, const char* keyName, const char* val);
 HRESULT CLSIDFromString(const char* lpsz, LPCLSID pclsid);
 
+// file and directory operations
 TempStr GetSpecialFolderTemp(int csidl, bool createIfMissing = false);
+TempStr GetTempDirTemp();
+TempStr GetExePathTemp();
+TempStr GetExeDirTemp();
+void ChangeCurrDirToDocuments();
+int FileTimeDiffInSecs(const FILETIME& ft1, const FILETIME& ft2);
+char* ResolveLnkTemp(const char* path);
+bool CreateShortcut(const char* shortcutPath, const char* exePath, const char* args = nullptr,
+                    const char* description = nullptr, int iconIndex = 0);
+DWORD GetFileVersion(const char* path);
+IDataObject* GetDataObjectForFile(const char* filePath, HWND hwnd = nullptr);
+
+HANDLE LaunchProcess(const char* cmdLine, const char* currDir = nullptr, DWORD flags = 0);
+bool CreateProcessHelper(const char* exe, const char* args);
+bool LaunchFile(const char* path, const char* params = nullptr, const char* verb = nullptr, bool hidden = false);
+bool LaunchBrowser(const char* url);
+
+bool LaunchElevated(const char* path, const char* cmdline);
+bool IsProcessRunningElevated();
+bool CanTalkToProcess(DWORD procId);
+DWORD GetAccountType();
+DWORD GetOriginalAccountType();
 
 void DisableDataExecution();
 bool RedirectIOToConsole();
 bool RedirectIOToExistingConsole();
 void HandleRedirectedConsoleOnShutdown();
-
-TempStr GetExePathTemp();
-
-TempStr GetExeDirTemp();
-
-void ChangeCurrDirToDocuments();
-int FileTimeDiffInSecs(const FILETIME& ft1, const FILETIME& ft2);
-
-char* ResolveLnkTemp(const char* path);
-
-bool CreateShortcut(const char* shortcutPath, const char* exePath, const char* args = nullptr,
-                    const char* description = nullptr, int iconIndex = 0);
-IDataObject* GetDataObjectForFile(const char* filePath, HWND hwnd = nullptr);
-DWORD GetFileVersion(const char* path);
 
 bool IsKeyPressed(int key);
 bool IsShiftPressed();
@@ -99,19 +107,6 @@ Rect GetWorkAreaRect(Rect rect, HWND hwnd);
 void LimitWindowSizeToScreen(HWND hwnd, SIZE& size);
 Rect GetFullscreenRect(HWND);
 Rect GetVirtualScreenRect();
-
-bool LaunchFile(const char* path, const char* params = nullptr, const char* verb = nullptr, bool hidden = false);
-bool LaunchBrowser(const char* url);
-
-HANDLE LaunchProcess(const char* cmdLine, const char* currDir = nullptr, DWORD flags = 0);
-
-bool CreateProcessHelper(const char* exe, const char* args);
-bool LaunchElevated(const char* path, const char* cmdline);
-
-bool IsProcessRunningElevated();
-bool CanTalkToProcess(DWORD procId);
-DWORD GetAccountType();
-DWORD GetOriginalAccountType();
 
 void PaintRect(HDC, Rect);
 void PaintLine(HDC, Rect);
@@ -149,7 +144,7 @@ int GetSizeOfDefaultGuiFont();
 HFONT GetDefaultGuiFont(bool bold = false, bool italic = false);
 HFONT GetDefaultGuiFontOfSize(int size);
 
-IStream* CreateStreamFromData(ByteSlice);
+IStream* CreateStreamFromData(const ByteSlice&);
 ByteSlice GetDataFromStream(IStream* stream, HRESULT* resOpt);
 ByteSlice GetStreamOrFileData(IStream* stream, const char* filePath);
 bool ReadDataFromStream(IStream* stream, void* buffer, size_t len, size_t offset = 0);
@@ -183,20 +178,15 @@ inline bool tobool(BOOL b) {
     return b != 0;
 }
 
-namespace menu {
-void SetChecked(HMENU m, int id, bool isChecked);
-bool SetEnabled(HMENU m, int id, bool isEnabled);
-void Remove(HMENU m, int id);
+void MenuSetChecked(HMENU m, int id, bool isChecked);
+bool MenuSetEnabled(HMENU m, int id, bool isEnabled);
+void MenuRemove(HMENU m, int id);
 // TODO: this doesn't recognize enum Cmd, why?
 // void Remove(HMENU m, enum Cmd id);
-void Empty(HMENU m);
-
-void SetText(HMENU m, int id, const WCHAR* s);
-void SetText(HMENU m, int id, const char* s);
-
-char* ToSafeStringTemp(const char* s);
-
-} // namespace menu
+void MenuEmpty(HMENU m);
+void MenuSetText(HMENU m, int id, const WCHAR* s);
+void MenuSetText(HMENU m, int id, const char* s);
+char* MenuToSafeStringTemp(const char* s);
 
 struct DoubleBuffer {
     HWND hTarget = nullptr;
@@ -283,7 +273,7 @@ bool TrackMouseLeave(HWND);
 void TriggerRepaint(HWND);
 HINSTANCE GetInstance();
 Size ButtonGetIdealSize(HWND hwnd);
-std::tuple<const u8*, DWORD, HGLOBAL> LockDataResource(int id);
+ByteSlice LockDataResource(int id);
 bool IsValidDelayType(int type);
 
 void HwndResizeClientSize(HWND, int, int);
@@ -313,7 +303,7 @@ void HwndDestroyWindowSafe(HWND* hwnd);
 void HwndToForeground(HWND hwnd);
 void HwndSetVisibility(HWND hwnd, bool visible);
 
-bool TextOutUtf8(HDC hdc, int x, int y, const char* s, size_t sLen = 0);
+bool TextOutUtf8(HDC hdc, int x, int y, const char* s, int sLen = 0);
 bool GetTextExtentPoint32Utf8(HDC hdc, const char* s, int sLen, LPSIZE psizl);
 int HdcDrawText(HDC hdc, const char* s, int sLen, RECT* r, UINT format);
 Size HdcMeasureText(HDC hdc, const char* s, UINT format);

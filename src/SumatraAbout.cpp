@@ -461,7 +461,7 @@ static void CreateInfotipForLink(StaticLinkInfo* linkInfo) {
     TooltipCreateArgs args;
     args.parent = gHwndAbout;
     gAboutTooltip->Create(args);
-    gAboutTooltip->ShowOrUpdate(linkInfo->infotip, linkInfo->rect, false);
+    gAboutTooltip->SetSingle(linkInfo->infotip, linkInfo->rect, false);
 }
 
 static void DeleteInfotip() {
@@ -512,7 +512,7 @@ LRESULT CALLBACK WndProcAbout(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
 
         case WM_LBUTTONUP:
             url = GetStaticLinkTemp(gStaticLinks, x, y, nullptr);
-            if (url && url == gClickedURL) {
+            if (url && str::Eq(url, gClickedURL)) {
                 SumatraLaunchBrowser(url);
             }
             break;

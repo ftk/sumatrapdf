@@ -388,11 +388,26 @@ void FindTextOnThread(MainWindow* win, TextSearchDirection direction, const char
     ftd->thread = win->findThread; // safe because only accesssed on ui thread
 }
 
+// TODO: for https://github.com/sumatrapdfreader/sumatrapdf/issues/2655
+char* ReverseTextTemp(char* s) {
+    WCHAR* ws = ToWstrTemp(s);
+    int n = (int)str::Len(ws);
+    for (int i = 0; i < n / 2; i++) {
+        WCHAR c1 = ws[i];
+        WCHAR c2 = ws[n - 1 - i];
+        ws[i] = c2;
+        ws[n - 1 - i] = c1;
+    }
+    return ToUtf8Temp(ws);
+}
+
 void FindTextOnThread(MainWindow* win, TextSearchDirection direction, bool showProgress) {
-    char* text = HwndGetTextTemp(win->hwndFindEdit);
+    char* s = HwndGetTextTemp(win->hwndFindEdit);
+    // if document is rtl, need to reverse the text
+    // s = ReverseTextTemp(s);
     bool wasModified = Edit_GetModify(win->hwndFindEdit);
     Edit_SetModify(win->hwndFindEdit, FALSE);
-    FindTextOnThread(win, direction, text, wasModified, showProgress);
+    FindTextOnThread(win, direction, s, wasModified, showProgress);
 }
 
 void PaintForwardSearchMark(MainWindow* win, HDC hdc) {
@@ -472,7 +487,8 @@ bool OnInverseSearch(MainWindow* win, int x, int y) {
 
     Point pt = ToPoint(dm->CvtFromScreen(Point(x, y), pageNo));
     AutoFreeStr srcfilepath;
-    uint line, col;
+    int line = 0;
+    int col = 0;
     int err = dm->pdfSync->DocToSource(pageNo, pt, srcfilepath, &line, &col);
     if (err != PDFSYNCERR_SUCCESS) {
         NotificationCreateArgs args;
@@ -493,16 +509,16 @@ bool OnInverseSearch(MainWindow* win, int x, int y) {
     }
 
     char* inverseSearch = gGlobalPrefs->inverseSearchCmdLine;
-    char* toFree = nullptr;
     if (!inverseSearch) {
-        // Detect a text editor and use it as the default inverse search handler for now
-        inverseSearch = AutoDetectInverseSearchCommands(nullptr);
-        toFree = inverseSearch;
+        StrVec detectedInverseSearch;
+        AutoDetectInverseSearchCommands(detectedInverseSearch);
+        char* s = detectedInverseSearch[0];
+        inverseSearch = str::DupTemp(s);
     }
 
     AutoFreeStr cmdLine;
     if (inverseSearch) {
-        cmdLine.Set(dm->pdfSync->PrepareCommandline(inverseSearch, srcfilepath, line, col));
+        cmdLine = FormatInverseSearchCommand(inverseSearch, srcfilepath, line, col);
     }
 
     NotificationCreateArgs args;
@@ -519,15 +535,11 @@ bool OnInverseSearch(MainWindow* win, int x, int y) {
         ShowNotification(args);
     }
 
-    if (toFree) {
-        str::Free(toFree);
-    }
-
     return true;
 }
 
 // Show the result of a PDF forward-search synchronization (initiated by a DDE command)
-void ShowForwardSearchResult(MainWindow* win, const char* fileName, uint line, uint /* col */, uint ret, uint page,
+void ShowForwardSearchResult(MainWindow* win, const char* fileName, int line, int /* col */, int ret, int page,
                              Vec<Rect>& rects) {
     CrashIf(!win->AsFixed());
     DisplayModel* dm = win->AsFixed();
@@ -670,7 +682,7 @@ static const char* HandleSyncCmd(const char* cmd, DDEACK& ack) {
     }
 
     ack.fAck = 1;
-    uint page;
+    int page;
     Vec<Rect> rects;
     int ret = dm->pdfSync->SourceToDoc(srcFile, line, col, &page, rects);
     ShowForwardSearchResult(win, srcFile, line, col, ret, page, rects);

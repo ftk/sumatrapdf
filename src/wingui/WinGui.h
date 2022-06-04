@@ -19,7 +19,7 @@ struct ContextMenuEvent {
     Point mouseScreen{};
 };
 
-using ContextMenuHandler2 = std::function<void(ContextMenuEvent*)>;
+using ContextMenuHandler = std::function<void(ContextMenuEvent*)>;
 
 struct CreateControlArgs {
     HWND parent = nullptr;
@@ -53,7 +53,7 @@ struct Wnd : public ILayout {
     Wnd();
     Wnd(HWND hwnd);
     virtual ~Wnd();
-    virtual void Destroy();
+    void Destroy();
 
     HWND CreateCustom(const CreateCustomArgs&);
     HWND CreateControl(const CreateControlArgs&);
@@ -70,17 +70,14 @@ struct Wnd : public ILayout {
     void SetBounds(Rect) override;
     void SetInsetsPt(int top, int right = -1, int bottom = -1, int left = -1);
 
-    HWND CreateEx(DWORD exStyle, LPCTSTR className, LPCTSTR windowName, DWORD style, int x, int y, int width,
-                  int height, HWND parent, HMENU idOrMenu, LPVOID lparam = NULL);
-
     void Attach(HWND hwnd);
     void AttachDlgItem(UINT id, HWND parent);
-
     HWND Detach();
-    void Cleanup();
 
     void Subclass();
-    // void UnSubclass();
+    void UnSubclass();
+
+    void Cleanup();
 
     // over-ride those to hook into message processing
     virtual LRESULT WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam);
@@ -112,14 +109,10 @@ struct Wnd : public ILayout {
     bool IsVisible() const;
     void SetText(const WCHAR*);
     void SetText(const char*);
-    TempStr GetText();
+    TempStr GetTextTemp();
 
-    HFONT GetFont() {
-        return font;
-    }
-    void SetFont(HFONT font) {
-        this->font = font;
-    }
+    HFONT GetFont();
+    void SetFont(HFONT font);
 
     void SetIsEnabled(bool isEnabled) const;
     bool IsEnabled() const;
@@ -144,16 +137,16 @@ struct Wnd : public ILayout {
     // data that can be set before calling Create()
     Visibility visibility{Visibility::Visible};
 
-    WNDPROC prevWindowProc = nullptr;
     HWND hwnd = nullptr;
     HFONT font = nullptr; // we don't own it
+    UINT_PTR subclassId = 0;
 
     COLORREF backgroundColor = ColorUnset;
     HBRUSH backgroundColorBrush = nullptr;
 
     ILayout* layout = nullptr;
 
-    ContextMenuHandler2 onContextMenu;
+    ContextMenuHandler onContextMenu;
 };
 
 bool PreTranslateMessage(MSG& msg);
@@ -214,21 +207,27 @@ struct TooltipCreateArgs {
     HFONT font = nullptr;
 };
 
+// a tooltip manages multiple areas withing HWND
 struct Tooltip : Wnd {
     Tooltip();
     HWND Create(const TooltipCreateArgs&);
     Size GetIdealSize() override;
 
-    void ShowOrUpdate(const char* s, Rect& rc, bool multiline);
-    void Hide();
+    int Add(const char* s, const Rect& rc, bool multiline);
+    void Update(int id, const char* s, const Rect& rc, bool multiline);
+    void Delete(int id = 0);
+
+    int SetSingle(const char* s, const Rect& rc, bool multiline);
+
+    int Count();
 
     void SetDelayTime(int type, int timeInMs);
     void SetMaxWidth(int dx);
-    int Count();
-    bool IsShowing();
 
     // window this tooltip is associated with
     HWND parent = nullptr;
+
+    Vec<int> tooltipIds;
 };
 
 //--- Edit

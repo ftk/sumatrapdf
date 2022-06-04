@@ -17,20 +17,13 @@
 
 #include "webview2.h"
 
-// TODO: move to premake
-#pragma comment(lib, "user32.lib")
-#pragma comment(lib, "Shlwapi.lib")
-// TODO: delay load windowsapp ?
-//#pragma comment(lib, "windowsapp")
-#pragma comment(lib, "shell32.lib")
-
 Kind kindWnd = "wnd";
 
-static UINT_PTR gSubclassId = 0;
+static LONG gSubclassId = 0;
 
 UINT_PTR NextSubclassId() {
-    gSubclassId++;
-    return gSubclassId;
+    LONG res = InterlockedIncrement(&gSubclassId);
+    return (UINT_PTR)res;
 }
 
 // TODO:
@@ -97,7 +90,7 @@ const DWORD WM_TASKBARBUTTONCREATED = ::RegisterWindowMessage(L"TaskbarButtonCre
 
 const WCHAR* kDefaultClassName = L"SumatraWgDefaultWinClass";
 
-LRESULT CALLBACK StaticWindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
+static LRESULT CALLBACK StaticWindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
     Wnd* window = WindowMapGetWindow(hwnd);
 
     if (msg == WM_NCCREATE) {
@@ -113,6 +106,11 @@ LRESULT CALLBACK StaticWindowProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lpa
     } else {
         return ::DefWindowProc(hwnd, msg, wparam, lparam);
     }
+}
+
+static LRESULT CALLBACK StaticWindowProcSubclassed(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp, UINT_PTR subclassId,
+                                                   DWORD_PTR data) {
+    return StaticWindowProc(hwnd, msg, wp, lp);
 }
 
 Wnd::Wnd() {
@@ -144,7 +142,7 @@ void Wnd::SetText(const char* s) {
     HwndInvalidate(hwnd); // TODO: move inside HwndSetText()?
 }
 
-TempStr Wnd::GetText() {
+TempStr Wnd::GetTextTemp() {
     char* s = HwndGetTextTemp(hwnd);
     return s;
 }
@@ -185,11 +183,7 @@ bool Wnd::IsVisible() const {
 
 void Wnd::Destroy() {
     HwndDestroyWindowSafe(&hwnd);
-    /*
-    if (prevWindowProc) {
-        UnSubclass();
-    }
-    */
+    UnSubclass();
     Cleanup();
 }
 
@@ -624,7 +618,7 @@ LRESULT Wnd::WndProcDefault(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
         }
 
         case WM_PAINT: {
-            if (prevWindowProc) {
+            if (subclassId) {
                 // Allow window controls to do their default drawing.
                 return FinalWindowProc(msg, wparam, lparam);
             }
@@ -754,9 +748,10 @@ LRESULT Wnd::WndProcDefault(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
 }
 
 LRESULT Wnd::FinalWindowProc(UINT msg, WPARAM wparam, LPARAM lparam) {
-    if (prevWindowProc) {
-        return ::CallWindowProc(prevWindowProc, hwnd, msg, wparam, lparam);
+    if (subclassId) {
+        return ::DefSubclassProc(hwnd, msg, wparam, lparam);
     } else {
+        // TODO: also DefSubclassProc?
         return ::DefWindowProc(hwnd, msg, wparam, lparam);
     }
 }
@@ -782,22 +777,18 @@ void Wnd::AttachDlgItem(UINT id, HWND parent) {
 }
 
 HWND Wnd::Detach() {
-    CrashIf(!prevWindowProc);
-    if (IsWindow(hwnd)) {
-        SetWindowLongPtrW(hwnd, GWLP_WNDPROC, (LONG_PTR)(prevWindowProc));
-    }
+    UnSubclass();
 
-    HWND wnd = this->hwnd;
+    HWND wnd = hwnd;
     WindowMapRemove(this);
-    this->hwnd = nullptr;
-    prevWindowProc = nullptr;
+    hwnd = nullptr;
     return wnd;
 }
 
 void Wnd::Cleanup() {
     WindowMapRemove(this);
     hwnd = nullptr;
-    prevWindowProc = nullptr;
+    subclassId = 0;
 }
 
 static void WndRegisterClass(const WCHAR* className) {
@@ -822,6 +813,7 @@ static void WndRegisterClass(const WCHAR* className) {
 
 HWND Wnd::CreateControl(const CreateControlArgs& args) {
     CrashIf(!args.className);
+    // TODO: validate that className is one of the known controls?
 
     font = args.font;
     if (!font) {
@@ -851,6 +843,8 @@ HWND Wnd::CreateControl(const CreateControlArgs& args) {
     hwnd = ::CreateWindowExW(exStyle, className, L"", style, x, y, dx, dy, parent, id, inst, createParams);
     HwndSetFont(hwnd, font);
     CrashIf(!hwnd);
+
+    // TODO: validate that
     Subclass();
     OnAttach();
 
@@ -866,6 +860,7 @@ HWND Wnd::CreateCustom(const CreateCustomArgs& args) {
     font = args.font;
 
     const WCHAR* className = args.className;
+    // TODO: validate className is not win32 control class
     if (className == nullptr) {
         className = kDefaultClassName;
     }
@@ -944,15 +939,32 @@ void Wnd::SetInsetsPt(int top, int right, int bottom, int left) {
 
 void Wnd::Subclass() {
     CrashIf(!IsWindow(hwnd));
-    CrashIf(prevWindowProc); // don't subclass multiple times
-
-    WindowMapAdd(hwnd, this);
-    WNDPROC proc = (WNDPROC)GetWindowLongPtrW(hwnd, GWLP_WNDPROC);
-    if (proc == StaticWindowProc) {
+    CrashIf(subclassId); // don't subclass multiple times
+    if (subclassId) {
         return;
     }
-    prevWindowProc = SubclassWindow(hwnd, StaticWindowProc);
-    CrashIf(!prevWindowProc);
+    WindowMapAdd(hwnd, this);
+
+    subclassId = NextSubclassId();
+    BOOL ok = SetWindowSubclass(hwnd, StaticWindowProcSubclassed, subclassId, (DWORD_PTR)this);
+    CrashIf(!ok);
+}
+
+void Wnd::UnSubclass() {
+    if (!subclassId) {
+        return;
+    }
+    RemoveWindowSubclass(hwnd, StaticWindowProcSubclassed, subclassId);
+    subclassId = 0;
+}
+
+HFONT Wnd::GetFont() {
+    return font;
+}
+
+void Wnd::SetFont(HFONT fontIn) {
+    font = fontIn;
+    // TODO: for controls, send WM_SETFONT message to original wndproc function
 }
 
 void Wnd::SetIsEnabled(bool isEnabled) const {
@@ -1228,6 +1240,13 @@ Button* CreateDefaultButton(HWND parent, const char* s) {
 
 Kind kindTooltip = "tooltip";
 
+LONG gTolltipID = 0;
+
+static int GetNextTooltipID() {
+    LONG res = InterlockedIncrement(&gTolltipID);
+    return (int)res;
+}
+
 Tooltip::Tooltip() {
     kind = kindTooltip;
 }
@@ -1246,7 +1265,8 @@ HWND Tooltip::Create(const TooltipCreateArgs& args) {
     return hwnd;
 }
 Size Tooltip::GetIdealSize() {
-    return {100, 32}; // not used as this is top-level window
+    // not used as this is top-level window
+    return {100, 32};
 }
 
 void Tooltip::SetMaxWidth(int dx) {
@@ -1264,59 +1284,86 @@ static void SetMaxWidthForText(HWND hwnd, const char* s, bool multiline) {
     SendMessageW(hwnd, TTM_SETMAXTIPWIDTH, 0, dx);
 }
 
-void Tooltip::ShowOrUpdate(const char* s, Rect& rc, bool multiline) {
-    WCHAR* ws = ToWstrTemp(s);
-    bool isShowing = IsShowing();
-    if (!isShowing) {
-        SetMaxWidthForText(hwnd, s, multiline);
-        TOOLINFOW ti = {0};
-        ti.cbSize = sizeof(ti);
-        ti.hwnd = parent;
-        ti.uFlags = TTF_SUBCLASS;
-        ti.rect = ToRECT(rc);
-        ti.lpszText = (WCHAR*)ws;
-        SendMessageW(hwnd, TTM_ADDTOOLW, 0, (LPARAM)&ti);
-        return;
-    }
-
-    constexpr int bufSize = 512;
-    WCHAR buf[bufSize] = {0};
-    TOOLINFOW tiCurr = {0};
-    tiCurr.cbSize = sizeof(tiCurr);
-    tiCurr.hwnd = parent;
-    tiCurr.lpszText = buf;
-    SendMessageW(hwnd, TTM_GETTEXT, bufSize - 1, (LPARAM)&tiCurr);
-    // TODO: should also compare ti.rect wit rc
-    if (str::Eq(buf, ws)) {
-        return;
-    }
-
+int Tooltip::Add(const char* s, const Rect& rc, bool multiline) {
+    int id = GetNextTooltipID();
     SetMaxWidthForText(hwnd, s, multiline);
-    tiCurr.lpszText = (WCHAR*)ws;
-    tiCurr.uFlags = TTF_SUBCLASS;
-    tiCurr.rect = ToRECT(rc);
-    SendMessageW(hwnd, TTM_UPDATETIPTEXT, 0, (LPARAM)&tiCurr);
-    SendMessageW(hwnd, TTM_NEWTOOLRECT, 0, (LPARAM)&tiCurr);
+    WCHAR* ws = ToWstrTemp(s);
+    TOOLINFOW ti = {0};
+    ti.cbSize = sizeof(ti);
+    ti.hwnd = parent;
+    ti.uId = (UINT_PTR)id;
+    ti.uFlags = TTF_SUBCLASS;
+    ti.rect = ToRECT(rc);
+    ti.lpszText = (WCHAR*)ws;
+    BOOL ok = SendMessageW(hwnd, TTM_ADDTOOLW, 0, (LPARAM)&ti);
+    if (!ok) {
+        return -1;
+    }
+    tooltipIds.Append(id);
+    return id;
+}
+
+void Tooltip::Update(int id, const char* s, const Rect& rc, bool multiline) {
+    SetMaxWidthForText(hwnd, s, multiline);
+    WCHAR* ws = ToWstrTemp(s);
+    TOOLINFOW ti = {0};
+    ti.cbSize = sizeof(ti);
+    ti.hwnd = parent;
+    ti.uId = (UINT_PTR)id;
+    ti.hwnd = parent;
+    ti.lpszText = (WCHAR*)ws;
+    ti.uFlags = TTF_SUBCLASS; // TODO: do I need this ?
+    ti.rect = ToRECT(rc);
+    SendMessageW(hwnd, TTM_UPDATETIPTEXT, 0, (LPARAM)&ti);
+    SendMessageW(hwnd, TTM_NEWTOOLRECT, 0, (LPARAM)&ti);
+}
+
+// this assumes we only have at most one tool per this tooltip
+int Tooltip::SetSingle(const char* s, const Rect& rc, bool multiline) {
+    WCHAR* ws = ToWstrTemp(s);
+    int n = Count();
+    // if want to use more tooltips, use Add() and Update()
+    ReportIf(n > 1);
+    if (n == 0) {
+        return Add(s, rc, multiline);
+    }
+    int id = tooltipIds[0];
+    Update(id, s, rc, multiline);
+    return id;
 }
 
 int Tooltip::Count() {
     int n = (int)SendMessageW(hwnd, TTM_GETTOOLCOUNT, 0, 0);
+    int n2 = tooltipIds.Size();
+    ReportIf(n != n2);
     return n;
 }
 
-bool Tooltip::IsShowing() {
-    return Count() > 0;
-}
-
-void Tooltip::Hide() {
-    if (!IsShowing()) {
+void Tooltip::Delete(int id) {
+    if (Count() == 0) {
         return;
     }
 
-    TOOLINFO ti{0};
+    int removeIdx = 0;
+    if (id == 0) {
+        // 0 means delete a single tool
+        // should only be used if we only have single tool
+        CrashIf(Count() > 1);
+        id = tooltipIds[0];
+    } else {
+        removeIdx = tooltipIds.Find(id);
+        CrashIf(removeIdx < 0);
+    }
+
+    TOOLINFOW ti{0};
     ti.cbSize = sizeof(ti);
-    ti.hwnd = hwnd;
-    SendMessageW(hwnd, TTM_DELTOOL, 0, (LPARAM)&ti);
+    ti.hwnd = parent;
+    ti.uId = (UINT_PTR)id;
+    int n1 = (int)SendMessageW(hwnd, TTM_GETTOOLCOUNT, 0, 0);
+    SendMessageW(hwnd, TTM_DELTOOLW, 0, (LPARAM)&ti);
+    int n2 = (int)SendMessageW(hwnd, TTM_GETTOOLCOUNT, 0, 0);
+    CrashIf(n1 != n2 + 1);
+    tooltipIds.RemoveAt(removeIdx);
 }
 
 // https://docs.microsoft.com/en-us/windows/win32/controls/ttm-setdelaytime
@@ -1388,12 +1435,13 @@ HWND Edit::Create(const EditCreateArgs& editArgs) {
         idealSizeLines = 1;
     }
     Wnd::CreateControl(args);
+    if (!hwnd) {
+        return nullptr;
+    }
     SizeToIdealSize(this);
 
-    if (hwnd) {
-        if (editArgs.cueText) {
-            EditSetCueText(hwnd, editArgs.cueText);
-        }
+    if (editArgs.cueText) {
+        EditSetCueText(hwnd, editArgs.cueText);
     }
     return hwnd;
 }
@@ -2633,12 +2681,12 @@ char* TreeView::GetDefaultTooltipTemp(TreeItem ti) {
     auto hItem = GetHandleByTreeItem(ti);
     WCHAR buf[INFOTIPSIZE + 1]{}; // +1 just in case
 
-    TVITEMW item{};
-    item.hItem = hItem;
-    item.mask = TVIF_TEXT;
-    item.pszText = buf;
-    item.cchTextMax = dimof(buf);
-    TreeView_GetItem(hwnd, &item);
+    TVITEMW it{};
+    it.hItem = hItem;
+    it.mask = TVIF_TEXT;
+    it.pszText = buf;
+    it.cchTextMax = dimof(buf);
+    TreeView_GetItem(hwnd, &it);
 
     return ToUtf8Temp(buf);
 }
@@ -2718,12 +2766,6 @@ void PopulateTreeItem(TreeView* treeView, TreeItem item, HTREEITEM parent) {
     if (n > dimof(tmp)) {
         size_t nBytes = (size_t)n * sizeof(TreeItem);
         a = (TreeItem*)malloc(nBytes);
-        nBytes = (size_t)n * sizeof(HTREEITEM);
-        if (a == nullptr) {
-            free(a);
-            a = &tmp[0];
-            n = (int)dimof(tmp);
-        }
     }
     // ChildAt() is optimized for sequential access and we need to
     // insert backwards, so gather the items in v first
@@ -2784,13 +2826,13 @@ bool TreeView::GetCheckState(TreeItem item) {
 TreeItemState TreeView::GetItemState(TreeItem ti) {
     TreeItemState res;
 
-    TVITEMW* item = GetTVITEM(this, ti);
-    CrashIf(!item);
-    if (!item) {
+    TVITEMW* it = GetTVITEM(this, ti);
+    CrashIf(!it);
+    if (!it) {
         return res;
     }
-    SetTreeItemState(item->state, res);
-    res.nChildren = item->cChildren;
+    SetTreeItemState(it->state, res);
+    res.nChildren = it->cChildren;
 
     return res;
 }
@@ -2804,7 +2846,7 @@ TreeItem GetOrSelectTreeItemAtPos(ContextMenuEvent* args, POINT& pt) {
     TreeModel* tm = treeView->treeModel;
     HWND hwnd = treeView->hwnd;
 
-    TreeItem ti = TreeModel::kNullItem;
+    TreeItem ti;
     pt = {args->mouseWindow.x, args->mouseWindow.y};
     if (pt.x == -1 || pt.y == -1) {
         // no mouse position when launched via keyboard shortcut

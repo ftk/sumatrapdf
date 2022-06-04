@@ -299,7 +299,7 @@ WCHAR* Dialog_Find(HWND hwnd, const WCHAR* previousSearch, bool* matchCase) {
 
 /* For passing data to/from AssociateWithPdf dialog */
 struct Dialog_PdfAssociate_Data {
-    bool dontAskAgain;
+    bool dontAskAgain = false;
 };
 
 static INT_PTR CALLBACK Dialog_PdfAssociate_Proc(HWND hDlg, UINT msg, WPARAM wp, LPARAM lp) {
@@ -505,9 +505,9 @@ static float GetZoomComboBoxValue(HWND hDlg, UINT idComboBox, bool forChm, float
 }
 
 struct Dialog_CustomZoom_Data {
-    float zoomArg;
-    float zoomResult;
-    bool forChm;
+    float zoomArg = 0;
+    float zoomResult = 0;
+    bool forChm = false;
 };
 
 static INT_PTR CALLBACK Dialog_CustomZoom_Proc(HWND hDlg, UINT msg, WPARAM wp, LPARAM lp) {
@@ -635,23 +635,28 @@ static INT_PTR CALLBACK Dialog_Settings_Proc(HWND hDlg, UINT msg, WPARAM wp, LPA
                 // Fill the combo with the list of possible inverse search commands
                 // Try to select a correct default when first showing this dialog
                 const char* cmdLine = prefs->inverseSearchCmdLine;
-                AutoFreeStr inverseSearch;
-                if (!cmdLine) {
-                    HWND hwnd = GetDlgItem(hDlg, IDC_CMDLINE);
-                    char* cmd = AutoDetectInverseSearchCommands(hwnd);
-                    inverseSearch.Set(cmd);
-                    cmdLine = inverseSearch;
+                HWND hwndComboBox = GetDlgItem(hDlg, IDC_CMDLINE);
+                StrVec detected;
+                AutoDetectInverseSearchCommands(detected);
+                if (cmdLine) {
+                    detected.AppendIfNotExists(cmdLine);
+                } else {
+                    cmdLine = detected[0];
                 }
-                // Find the index of the active command line
-                LRESULT ind =
-                    SendMessageW(GetDlgItem(hDlg, IDC_CMDLINE), CB_FINDSTRINGEXACT, (WPARAM)-1, (LPARAM)cmdLine);
-                if (CB_ERR == ind) {
+                for (char* s : detected) {
+                    WCHAR* ws = ToWstrTemp(s);
                     // if no existing command was selected then set the user custom command in the combo
-                    ComboBox_AddItemData(GetDlgItem(hDlg, IDC_CMDLINE), cmdLine);
-                    SetDlgItemTextA(hDlg, IDC_CMDLINE, cmdLine);
+                    ComboBox_AddString(hwndComboBox, ws);
+                }
+
+                WCHAR* cmdLineW = ToWstrTemp(cmdLine);
+                // Find the index of the active command line
+                LRESULT ind = SendMessageW(hwndComboBox, CB_FINDSTRINGEXACT, (WPARAM)-1, (LPARAM)cmdLineW);
+                if (CB_ERR == ind) {
+                    SetDlgItemTextW(hDlg, IDC_CMDLINE, cmdLineW);
                 } else {
                     // select the active command
-                    SendMessageW(GetDlgItem(hDlg, IDC_CMDLINE), CB_SETCURSEL, (WPARAM)ind, 0);
+                    SendMessageW(hwndComboBox, CB_SETCURSEL, (WPARAM)ind, 0);
                 }
             } else {
                 RemoveDialogItem(hDlg, IDC_SECTION_INVERSESEARCH, IDC_SECTION_ADVANCED);

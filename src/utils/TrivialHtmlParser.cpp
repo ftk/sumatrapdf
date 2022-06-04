@@ -16,29 +16,29 @@ name/val pointers inside Element/Attr structs refer to
 memory inside HtmlParser::s, so they don't need to be freed.
 */
 
-bool HtmlElement::NameIs(const char* name) const {
-    if (!this->name) {
-        CrashIf(Tag_NotFound == this->tag);
-        HtmlTag tag = FindHtmlTag(name, str::Len(name));
-        return tag == this->tag;
+bool HtmlElement::NameIs(const char* nameIn) const {
+    if (!name) {
+        CrashIf(Tag_NotFound == tag);
+        HtmlTag tg = FindHtmlTag(nameIn, str::Len(nameIn));
+        return tg == tag;
     }
-    return str::EqI(this->name, name);
+    return str::EqI(name, nameIn);
 }
 
 // for now just ignores any namespace qualifier
 // (i.e. succeeds for "opf:content" with name="content" and any value of ns)
 // TODO: add proper namespace support
-bool HtmlElement::NameIsNS(const char* name, const char* ns) const {
+bool HtmlElement::NameIsNS(const char* nameIn, const char* ns) const {
     CrashIf(!ns);
     const char* nameStart = nullptr;
-    if (this->name) {
-        nameStart = str::FindChar(this->name, ':');
+    if (name) {
+        nameStart = str::FindChar(name, ':');
     }
     if (!nameStart) {
-        return NameIs(name);
+        return NameIs(nameIn);
     }
     ++nameStart;
-    return str::EqI(nameStart, name);
+    return str::EqI(nameStart, nameIn);
 }
 
 HtmlElement* HtmlElement::GetChildByTag(HtmlTag tag, int idx) const {
@@ -255,7 +255,7 @@ size_t HtmlParser::TotalAttrCount() const {
 
 // Parse s in place i.e. we assume we can modify it. Must be 0-terminated.
 // The caller owns the memory for s.
-HtmlElement* HtmlParser::ParseInPlace(ByteSlice d, uint codepage) {
+HtmlElement* HtmlParser::ParseInPlace(const ByteSlice& d, uint codepage) {
     if (this->html) {
         Reset();
     }
@@ -306,9 +306,9 @@ HtmlElement* HtmlParser::ParseInPlace(ByteSlice d, uint codepage) {
     return rootElement;
 }
 
-HtmlElement* HtmlParser::Parse(ByteSlice d, uint codepage) {
+HtmlElement* HtmlParser::Parse(const ByteSlice& d, uint codepage) {
     char* s = str::Dup(d);
-    HtmlElement* root = ParseInPlace(str::ToSpan(s), codepage);
+    HtmlElement* root = ParseInPlace(ToByteSlice(s), codepage);
     freeHtml = true;
     return root;
 }

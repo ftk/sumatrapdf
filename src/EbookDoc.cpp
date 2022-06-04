@@ -168,7 +168,7 @@ inline char decode64(char c) {
     return -1;
 }
 
-static ByteSlice Base64Decode(ByteSlice data) {
+static ByteSlice Base64Decode(const ByteSlice& data) {
     size_t sLen = data.size();
     u8* s = data.data();
     u8* end = data.data() + sLen;
@@ -454,8 +454,8 @@ bool EpubDoc::Load() {
             continue;
         }
 
-        const char* fileName = pathList.at(idList.Find(idref));
-        char* fullPath = str::JoinTemp(contentPath, fileName);
+        const char* fname = pathList.at(idList.Find(idref));
+        char* fullPath = str::JoinTemp(contentPath, fname);
         ByteSlice html = zip->GetFileDataByName(fullPath);
         if (!html) {
             continue;
@@ -812,11 +812,10 @@ static ByteSlice loadFromFile(Fb2Doc* doc) {
     // the file must contain a single .fb2 file and may only contain
     // .url files in addition (TODO: anything else?)
     for (auto&& fileInfo : fileInfos) {
-        auto fileName = fileInfo->name;
-        char* ext = path::GetExtTemp(fileName);
-        if (str::EqI(ext, ".fb2") && data.empty()) {
+        auto path = fileInfo->name;
+        if (str::EndsWithI(path, ".fb2") && data.empty()) {
             data = archive->GetFileDataById(fileInfo->fileId);
-        } else if (!str::EqI(ext, ".url")) {
+        } else if (!str::EndsWithI(path, ".url")) {
             return {};
         }
     }
@@ -1018,8 +1017,8 @@ bool Fb2Doc::ParseToc(EbookTocVisitor* visitor) const {
     int titleCount = 0;
     int level = 0;
 
-    auto xmlData = GetXmlData();
-    HtmlPullParser parser(xmlData);
+    auto xmlData2 = GetXmlData();
+    HtmlPullParser parser(xmlData2);
     HtmlToken* tok;
     while ((tok = parser.Next()) != nullptr && !tok->IsError()) {
         if (tok->IsStartTag() && Tag_Section == tok->tag) {
@@ -1381,8 +1380,8 @@ static char* DecompressTcrText(const char* data, size_t dataLen) {
     const char* curr = data + str::Len(TCR_HEADER);
     const char* end = data + dataLen;
 
-    const char* dict[256];
-    for (int n = 0; n < dimof(dict); n++) {
+    const char* dict[256] = {0};
+    for (int n = 0; n < (int)dimof(dict); n++) {
         if (curr >= end) {
             return str::Dup(data);
         }

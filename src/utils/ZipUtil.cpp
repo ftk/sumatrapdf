@@ -271,3 +271,74 @@ IStream* OpenDirAsZipStream(const char* dirPath, bool recursive) {
     stream->AddRef();
     return stream;
 }
+
+// adapted from https://www.cocoanetics.com/2012/02/decompressing-files-into-memory/
+// d is a content of gzip file
+// returns uncpmpressed data
+// the returned data will have 2 zero bytes at end to make sure it's also
+// a 0-terminated char* or WCHA* string
+// those 2 bytes are not reported as
+ByteSlice Ungzip(const ByteSlice& d) {
+    size_t len = d.size();
+    u8* dataCompr = d.d;
+    // aggressive growth for uncompressed buffer because I use this
+    // for .syntex files and they compress really well
+    size_t lenUncr = len * 2;
+
+    bool done = false;
+    int res;
+
+    z_stream strm;
+    strm.next_in = (Bytef*)dataCompr;
+    strm.avail_in = (uInt)len;
+    strm.total_out = 0;
+    strm.zalloc = Z_NULL;
+    strm.zfree = Z_NULL;
+
+    res = inflateInit2(&strm, (15 + 32));
+    if (res != Z_OK) {
+        return {};
+    }
+
+    // +2 for space for terminating char* or WCHAR*
+    u8* dataUncr = AllocArray<u8>(lenUncr + 2);
+    if (!dataUncr) {
+        return {};
+    }
+
+    while (!done) {
+        if (strm.total_out >= lenUncr) {
+            size_t newLen = lenUncr * 2;
+            u8* dataUncr2 = (u8*)realloc(dataUncr, newLen + 2);
+            if (!dataUncr2) {
+                free((void*)dataUncr);
+                return {};
+            }
+            dataUncr = dataUncr2;
+            lenUncr = newLen;
+        }
+
+        strm.next_out = dataUncr + strm.total_out;
+        strm.avail_out = (uInt)lenUncr - (uInt)strm.total_out;
+
+        // Inflate another chunk.
+        res = inflate(&strm, Z_SYNC_FLUSH);
+
+        if (res == Z_STREAM_END) {
+            done = true;
+        } else if (res != Z_OK) {
+            break;
+        }
+    }
+    res = inflateEnd(&strm);
+    if (!done || res != Z_OK) {
+        free((void*)dataUncr);
+        return {};
+    }
+
+    lenUncr = strm.total_out;
+    // also make it a valid 0-terminated char* or WCHAR* string
+    dataUncr[lenUncr] = 0;
+    dataUncr[lenUncr + 1] = 0;
+    return {dataUncr, lenUncr};
+}

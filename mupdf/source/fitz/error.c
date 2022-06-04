@@ -180,6 +180,12 @@ FZ_NORETURN static void throw(fz_context *ctx, int code)
 		if (ctx->error.top->code != FZ_ERROR_NONE)
 			fz_warn(ctx, "clobbering previous error code and message (throw in always block?)");
 		ctx->error.top->code = code;
+		/* SumatraPDF: https://fossies.org/linux/tcsh/win32/fork.c#l_212
+		https://stackoverflow.com/questions/26605063/an-invalid-or-unaligned-stack-was-encountered-during-an-unwind-operation
+		*/
+		#ifdef _M_AMD64
+		((_JUMP_BUFFER*)&ctx->error.top->buffer)->Frame = 0;
+		#endif
 		fz_longjmp(ctx->error.top->buffer, 1);
 	}
 	else
@@ -187,6 +193,9 @@ FZ_NORETURN static void throw(fz_context *ctx, int code)
 		fz_flush_warnings(ctx);
 		if (ctx->error.print)
 			ctx->error.print(ctx->error.print_user, "aborting process from uncaught error!");
+		/* SumatraPDF: crash rather than exit */
+		char* p = 0;
+		*p = 0;
 		exit(EXIT_FAILURE);
 	}
 }
@@ -216,12 +225,6 @@ fz_jmp_buf *fz_push_try(fz_context *ctx)
 		ctx->error.top->state = 0;
 		ctx->error.top->code = FZ_ERROR_NONE;
 	}
-	/* SumatraPDF: https://fossies.org/linux/tcsh/win32/fork.c#l_212
-	https://stackoverflow.com/questions/26605063/an-invalid-or-unaligned-stack-was-encountered-during-an-unwind-operation
-	*/
-#ifdef _M_AMD64
-	((_JUMP_BUFFER *)&ctx->error.top->buffer)->Frame = 0;
-#endif
 	return &ctx->error.top->buffer;
 }
 

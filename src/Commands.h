@@ -27,6 +27,7 @@ Cmd* enum (e.g. CmdOpen) and a human-readable name (not used yet).
     V(CmdRotateLeft, "Rotate Left")                                       \
     V(CmdRotateRight, "Rotate Right")                                     \
     V(CmdToggleBookmarks, "Toggle Bookmarks")                             \
+    V(CmdToggleTableOfContents, "Toggle Table Of Contents")               \
     V(CmdToggleFullscreen, "Toggle Fullscreen")                           \
     V(CmdPresentationWhiteBackground, "Presentation White Background")    \
     V(CmdPresentationBlackBackground, "Presentation Black Background")    \
@@ -54,7 +55,7 @@ Cmd* enum (e.g. CmdOpen) and a human-readable name (not used yet).
     V(CmdScrollUpPage, "Scroll Up By Page")                               \
     V(CmdScrollDownPage, "Scroll Down By Page")                           \
     V(CmdScrollDownHalfPage, "Scroll Down By Half Page")                  \
-    V(CmdScrollUpHalfPage, "Scroll Down By Half Page")                    \
+    V(CmdScrollUpHalfPage, "Scroll Up By Half Page")                      \
     V(CmdGoToNextPage, "Next Page")                                       \
     V(CmdGoToPrevPage, "Previous Page")                                   \
     V(CmdGoToFirstPage, "First Page")                                     \
@@ -154,9 +155,12 @@ Cmd* enum (e.g. CmdOpen) and a human-readable name (not used yet).
     V(CmdOpenNextFileInFolder, "Open Next File In Folder")                \
     V(CmdOpenPrevFileInFolder, "Open Previous File In Folder")            \
     V(CmdCommandPalette, "Command Palette")                               \
+    V(CmdCommandPaletteNoFiles, "Command Palette No Files")               \
     V(CmdShowLog, "Show Log")                                             \
     V(CmdClearHistory, "Clear History")                                   \
     V(CmdReopenLastClosedFile, "Reopen Last Closed")                      \
+    V(CmdNextTab, "Next Tab")                                             \
+    V(CmdPrevTab, "Previous Tab")                                         \
     V(CmdNone, "Do nothing")
 
 // order of CreateAnnot* must be the same as enum AnnotationType

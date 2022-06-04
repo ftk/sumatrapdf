@@ -71,7 +71,7 @@ struct DrawInstr {
 
     // helper constructors for instructions that need additional arguments
     static DrawInstr Str(const char* s, size_t len, RectF bbox, bool rtl = false);
-    static DrawInstr Image(ByteSlice, RectF bbox);
+    static DrawInstr Image(const ByteSlice&, RectF bbox);
     static DrawInstr SetFont(mui::CachedFont* font);
     static DrawInstr FixedSpace(float dx);
     static DrawInstr LinkStart(const char* s, size_t len);
@@ -195,7 +195,7 @@ class HtmlFormatter {
     bool FlushCurrLine(bool isParagraphBreak);
     void UpdateLinkBboxes(HtmlPage* page);
 
-    bool EmitImage(ByteSlice* img);
+    bool EmitImage(const ByteSlice* img);
     void EmitHr();
     void EmitTextRun(const char* s, const char* end);
     void EmitElasticSpace();
@@ -221,7 +221,7 @@ class HtmlFormatter {
     StyleRule* FindStyleRule(HtmlTag tag, const char* clazz, size_t clazzLen);
     StyleRule ComputeStyleRule(HtmlToken* t);
 
-    void AppendInstr(DrawInstr di);
+    void AppendInstr(const DrawInstr& di);
     bool IsCurrLineEmpty();
     virtual bool IgnoreText();
 

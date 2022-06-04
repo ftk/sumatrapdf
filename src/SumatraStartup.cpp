@@ -290,7 +290,7 @@ static MainWindow* LoadOnStartup(const char* filePath, const Flags& flags, bool 
         dm->SetScrollState(ss);
     }
     if (flags.forwardSearchOrigin && flags.forwardSearchLine && win->AsFixed() && win->AsFixed()->pdfSync) {
-        uint page;
+        int page;
         Vec<Rect> rects;
         char* srcPath = path::NormalizeTemp(flags.forwardSearchOrigin);
         int ret = win->AsFixed()->pdfSync->SourceToDoc(srcPath, flags.forwardSearchLine, 0, &page, rects);
@@ -750,7 +750,7 @@ static void ForceStartupLeaks() {
 
 int APIENTRY WinMain(HINSTANCE hInstance, __unused HINSTANCE hPrevInstance, __unused LPSTR cmdLine,
                      __unused int nCmdShow) {
-    int retCode = 1; // by default it's error
+    int exitCode = 1; // by default it's error
     int nWithDde = 0;
     MainWindow* win = nullptr;
     bool showStartPage = false;
@@ -826,7 +826,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, __unused HINSTANCE hPrevInstance, __un
 
     {
         char* s = ToUtf8Temp(GetCommandLineW());
-        logf("Starting SumatraPDF, GetCommandLineW():\n%s\n", s);
+        logf("Starting SumatraPDF %s, GetCommandLineW():\n%s\n", UPDATE_CHECK_VERA, s);
     }
 #if defined(DEBUG)
     if (gIsDebugBuild || gIsPreReleaseBuild) {
@@ -841,18 +841,6 @@ int APIENTRY WinMain(HINSTANCE hInstance, __unused HINSTANCE hPrevInstance, __un
     }
 #endif
 
-
-#ifdef DEBUG
-    if (flags.toEpubPath) {
-        RedirectIOToExistingConsole();
-        auto res = MobiToEpub(flags.toEpubPath);
-        DeleteVecMembers(res);
-        if (flags.exitWhenDone) {
-            fastExit = !gIsDebugBuild;
-            goto Exit;
-        }
-    }
-#endif
 
     if (flags.deleteFile) {
         RedirectIOToExistingConsole();
@@ -914,17 +902,15 @@ int APIENTRY WinMain(HINSTANCE hInstance, __unused HINSTANCE hPrevInstance, __un
     SetCurrentLang(flags.lang ? flags.lang : gGlobalPrefs->uiLanguage);
 
 #if defined(DEBUG)
-    if (false) {
-        // LoadFile();
-        LoadRar();
-        return 0;
-    }
-#endif
-
-#if defined(DEBUG)
     void TestBrowser(); // scratch.cpp
     if (flags.testBrowser) {
         TestBrowser();
+        return 0;
+    }
+
+    void TestUngzip();
+    if (false) {
+        TestUngzip();
         return 0;
     }
 #endif
@@ -971,14 +957,14 @@ int APIENTRY WinMain(HINSTANCE hInstance, __unused HINSTANCE hPrevInstance, __un
     if (flags.printerName) {
         // note: this prints all PDF files. Another option would be to
         // print only the first one
-        auto nFiles = flags.fileNames.size();
         for (char* path : flags.fileNames) {
             bool ok = PrintFile(path, flags.printerName, !flags.silent, flags.printSettings);
             if (!ok) {
-                retCode++;
+                exitCode++;
             }
         }
-        --retCode; // was 1 if no print failures, turn 1 into 0
+        --exitCode; // was 1 if no print failures, turn 1 into 0
+        logf("Finished printing, exitCode: %d\n", exitCode);
         goto Exit;
     }
 
@@ -1065,11 +1051,11 @@ ContinueOpenWindow:
         }
         win = LoadOnStartup(path, flags, !win);
         if (!win) {
-            retCode++;
+            exitCode++;
             continue;
         }
         if (flags.printDialog) {
-            OnMenuPrint(win, flags.exitWhenDone);
+            PrintCurrentFile(win, flags.exitWhenDone);
         }
     }
     SelectTabInWindow(tabToSelect);
@@ -1083,7 +1069,7 @@ ContinueOpenWindow:
             }
             win = LoadOnStartup(path, flags, !win);
             if (!win) {
-                retCode++;
+                exitCode++;
             }
         }
         gDdeOpenOnStartup.Reset();
@@ -1143,11 +1129,12 @@ ContinueOpenWindow:
 
     BringWindowToTop(win->hwndFrame);
 
-    retCode = RunMessageLoop();
+    exitCode = RunMessageLoop();
     SafeCloseHandle(&hMutex);
     CleanUpThumbnailCache(gFileHistory);
 
 Exit:
+    logf("Exiting with exit code: %d\n", exitCode);
     UnregisterSettingsForFileChanges();
 
     HandleRedirectedConsoleOnShutdown();
@@ -1159,7 +1146,7 @@ Exit:
     if (fastExit) {
         // leave all the remaining clean-up to the OS
         // (as recommended for a quick exit)
-        ::ExitProcess(retCode);
+        ::ExitProcess(exitCode);
     }
     str::Free(logFilePath);
 
@@ -1221,5 +1208,5 @@ Exit:
     }
 #endif
 
-    return retCode;
+    return exitCode;
 }

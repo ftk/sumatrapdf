@@ -277,9 +277,8 @@ static void StrVecTest() {
     }
     StrVecCheckIter(v, strs);
 
-    StrVecSortedView sortedView;
-    bool ok = v.GetSortedView(sortedView);
-    CrashIf(!ok);
+    StrVec sortedView = v;
+    sortedView.Sort();
 
     for (int i = 0; i < n; i++) {
         char* got = sortedView.at(i);
@@ -304,9 +303,7 @@ static void StrVecTest() {
         auto exp = strs[4];
         assertStrEq(got, exp);
     }
-
-    ok = v.GetSortedViewNoCase(sortedView);
-    CrashIf(!ok);
+    sortedView.SortNoCase();
 
     for (int i = 0; i < n; i++) {
         auto got = sortedView.at(i);
@@ -661,7 +658,7 @@ void StrTest() {
     };
 
     for (int i = 0; i < dimof(formatNumData); i++) {
-        AutoFreeStr tmp(str::FormatNumWithThousandSep(formatNumData[i].number, LOCALE_INVARIANT));
+        char* tmp = str::FormatNumWithThousandSepTemp(formatNumData[i].number, LOCALE_INVARIANT);
         utassert(str::Eq(tmp, formatNumData[i].result));
     }
 
@@ -674,7 +671,7 @@ void StrTest() {
     };
 
     for (int i = 0; i < dimof(formatFloatData); i++) {
-        AutoFreeStr tmp(str::FormatFloatWithThousandSep(formatFloatData[i].number, LOCALE_INVARIANT));
+        char* tmp = str::FormatFloatWithThousandSepTemp(formatFloatData[i].number, LOCALE_INVARIANT);
         utassert(str::Eq(tmp, formatFloatData[i].result));
     }
 

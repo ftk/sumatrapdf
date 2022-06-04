@@ -2,6 +2,7 @@
    License: GPLv3 */
 
 #include "utils/BaseUtil.h"
+#include "utils/StrFormat.h"
 #include "utils/ScopedWin.h"
 #include "utils/WinDynCalls.h"
 #include "utils/CryptoUtil.h"
@@ -380,7 +381,7 @@ MainWindow* FindMainWindowByFile(const char* file, bool focusTab) {
 MainWindow* FindMainWindowBySyncFile(const char* path, bool focusTab) {
     for (MainWindow* win : gWindows) {
         Vec<Rect> rects;
-        uint page;
+        int page;
         auto dm = win->AsFixed();
         if (dm && dm->pdfSync && dm->pdfSync->SourceToDoc(path, 0, 0, &page, rects) != PDFSYNCERR_UNKNOWN_SOURCEFILE) {
             return win;
@@ -678,7 +679,7 @@ struct ControllerCallbackHandler : DocControllerCallback {
         win->linkHandler->GotoLink(dest);
     }
     void FocusFrame(bool always) override;
-    void SaveDownload(const char* url, ByteSlice data) override;
+    void SaveDownload(const char* url, const ByteSlice&) override;
 };
 
 void ControllerCallbackHandler::RenderThumbnail(DisplayModel* dm, Size size, const onBitmapRenderedCb& saveThumbnail) {
@@ -764,7 +765,7 @@ void ControllerCallbackHandler::FocusFrame(bool always) {
     }
 }
 
-void ControllerCallbackHandler::SaveDownload(const char* url, ByteSlice data) {
+void ControllerCallbackHandler::SaveDownload(const char* url, const ByteSlice& data) {
     char* path = url::GetFileName(url);
     // LinkSaver linkSaver(win->currentTab, win->hwndFrame, fileName);
     SaveDataToFile(win->hwndFrame, path, data);
@@ -1638,8 +1639,13 @@ static MainWindow* LoadDocumentFinish(LoadArgs* args, bool lazyload) {
     CrashIf(openNewTab && args->forceReuse);
 
     if (win->IsAboutWindow()) {
+        // TODO: probably need to do it when switching tabs
         // invalidate the links on the Frequently Read page
         DeleteVecMembers(win->staticLinks);
+        Rect rc = {};
+        // TODO: a hack, need a way to clear tooltips
+        win->infotip->Delete();
+        win->DeleteToolTip();
         // there's no tab to reuse at this point
         args->forceReuse = false;
     } else {
@@ -1924,7 +1930,7 @@ void LoadModelIntoTab(TabInfo* tab) {
 
 enum class MeasurementUnit { pt, mm, in };
 
-static char* FormatCursorPosition(EngineBase* engine, PointF pt, MeasurementUnit unit) {
+static TempStr FormatCursorPositionTemp(EngineBase* engine, PointF pt, MeasurementUnit unit) {
     if (pt.x < 0) {
         pt.x = 0;
     }
@@ -1949,8 +1955,8 @@ static char* FormatCursorPosition(EngineBase* engine, PointF pt, MeasurementUnit
             break;
     }
 
-    AutoFreeStr xPos(str::FormatFloatWithThousandSep((double)pt.x * (double)factor));
-    AutoFreeStr yPos(str::FormatFloatWithThousandSep((double)pt.y * (double)factor));
+    char* xPos = str::FormatFloatWithThousandSepTemp((double)pt.x * (double)factor);
+    char* yPos = str::FormatFloatWithThousandSepTemp((double)pt.y * (double)factor);
     if (unit != MeasurementUnit::in) {
         // use similar precision for all units
         if (str::IsDigit(xPos[str::Len(xPos) - 2])) {
@@ -1960,7 +1966,7 @@ static char* FormatCursorPosition(EngineBase* engine, PointF pt, MeasurementUnit
             yPos[str::Len(yPos) - 1] = '\0';
         }
     }
-    return str::Format("%s x %s %s", xPos.Get(), yPos.Get(), unitName);
+    return fmt::FormatTemp("%s x %s %s", xPos, yPos, unitName);
 }
 
 void UpdateCursorPositionHelper(MainWindow* win, Point pos, NotificationWnd* wnd) {
@@ -1986,15 +1992,16 @@ void UpdateCursorPositionHelper(MainWindow* win, Point pos, NotificationWnd* wnd
     CrashIf(!win->AsFixed());
     EngineBase* engine = win->AsFixed()->GetEngine();
     PointF pt = win->AsFixed()->CvtFromScreen(pos);
-    AutoFreeStr posStr(FormatCursorPosition(engine, pt, unit)), selStr;
+    char* posStr = FormatCursorPositionTemp(engine, pt, unit);
+    char* selStr = nullptr;
     if (!win->selectionMeasure.IsEmpty()) {
         pt = PointF(win->selectionMeasure.dx, win->selectionMeasure.dy);
-        selStr.Set(FormatCursorPosition(engine, pt, unit));
+        selStr = FormatCursorPositionTemp(engine, pt, unit);
     }
 
-    AutoFreeStr posInfo(str::Format("%s %s", _TRA("Cursor position:"), posStr.Get()));
+    char* posInfo = fmt::FormatTemp("%s %s", _TRA("Cursor position:"), posStr);
     if (selStr) {
-        posInfo.Set(str::Format("%s - %s %s", posInfo.Get(), _TRA("Selection:"), selStr.Get()));
+        posInfo = fmt::FormatTemp("%s - %s %s", posInfo, _TRA("Selection:"), selStr);
     }
     if (!wnd) {
         NotificationCreateArgs args;
@@ -2546,7 +2553,7 @@ static bool AppendFileFilterForDoc(DocController* ctrl, str::WStr& fileFilter) {
     return true;
 }
 
-static void OnMenuSaveAs(MainWindow* win) {
+static void SaveCurrentFileAs(MainWindow* win) {
     if (!HasPermission(Perm::DiskAccess)) {
         return;
     }
@@ -2569,8 +2576,6 @@ static void OnMenuSaveAs(MainWindow* win) {
     if (!srcFileName) {
         return;
     }
-
-    WCHAR* srcFileNameW = ToWstrTemp(srcFileName);
 
     DisplayModel* dm = win->AsFixed();
     EngineBase* engine = dm ? dm->GetEngine() : nullptr;
@@ -2710,8 +2715,8 @@ static void OnMenuSaveAs(MainWindow* win) {
         ok = engine->SaveFileAs(realDstFileName);
     } else if (!path::IsSame(srcFileName, realDstFileName)) {
         // ... else just copy the file
-        WCHAR* msgBuf;
-        ok = file::Copy(srcFileName, realDstFileName, false);
+        WCHAR* msgBuf = nullptr;
+        ok = file::Copy(realDstFileName, srcFileName, false);
         if (ok) {
             // Make sure that the copy isn't write-locked or hidden
             const DWORD attributesToDrop = FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM;
@@ -2722,7 +2727,7 @@ static void OnMenuSaveAs(MainWindow* win) {
         } else if (FormatMessage(
                        FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
                        nullptr, GetLastError(), 0, (LPWSTR)&msgBuf, 0, nullptr)) {
-            errorMsg.Set(str::Format(L"%s\n\n%s", _TR("Failed to save a file"), msgBuf));
+            errorMsg = str::Format(L"%s\n\n%s", _TR("Failed to save a file"), msgBuf);
             LocalFree(msgBuf);
         }
     }
@@ -2766,7 +2771,7 @@ static void OnMenuShowInFolder(MainWindow* win) {
     CreateProcessHelper(process, args);
 }
 
-static void OnMenuRenameFile(MainWindow* win) {
+static void RenameCurrentFile(MainWindow* win) {
     if (!HasPermission(Perm::DiskAccess)) {
         return;
     }
@@ -3071,7 +3076,7 @@ static void OnMenuOpen(MainWindow* win) {
         {_TR("Mobi documents"), L"*.mobi", true},
         {_TR("FictionBook documents"), L"*.fb2;*.fb2z;*.zfb2;*.fb2.zip", true},
         {_TR("PalmDoc documents"), L"*.pdb;*.prc", true},
-        {_TR("Images"), L"*.bmp;*.dib;*.gif;*.jpg;*.jpeg;*.jxr;*.png;*.tga;*.tif;*.tiff;*.webp", true},
+        {_TR("Images"), L"*.bmp;*.dib;*.gif;*.jpg;*.jpeg;*.jxr;*.png;*.tga;*.tif;*.tiff;*.webp;*.heic;*.avif", true},
         {_TR("Text documents"), L"*.txt;*.log;*.nfo;file_id.diz;read.me;*.tcr", true},
     };
     // Prepare the file filters (use \1 instead of \0 so that the
@@ -4033,7 +4038,6 @@ static void FrameOnChar(MainWindow* win, WPARAM key, LPARAM info = 0) {
     }
 
     bool isCtrl = IsCtrlPressed();
-    bool isShift = IsShiftPressed();
     bool isAlt = IsAltPressed();
 
     if (key >= 0x100 && info && !isCtrl && !isAlt) {
@@ -4061,8 +4065,7 @@ static void FrameOnChar(MainWindow* win, WPARAM key, LPARAM info = 0) {
         key = (WPARAM)SingleCharLowerW((WCHAR)key);
     }
 
-    auto* ctrl = win->ctrl;
-    DisplayModel* dm = win->AsFixed();
+    DocController* ctrl = win->ctrl;
 
     switch (key) {
         // per https://en.wikipedia.org/wiki/Keyboard_layout
@@ -4623,19 +4626,23 @@ static LRESULT FrameOnCommand(MainWindow* win, HWND hwnd, UINT msg, WPARAM wp, L
             break;
 
         case CmdRenameFile:
-            OnMenuRenameFile(win);
+            RenameCurrentFile(win);
             break;
 
         case CmdSaveAs:
-            OnMenuSaveAs(win);
+            SaveCurrentFileAs(win);
             break;
 
         case CmdPrint:
-            OnMenuPrint(win);
+            PrintCurrentFile(win);
             break;
 
         case CmdCommandPalette:
-            RunCommandPallette(win);
+            RunCommandPallette(win, false);
+            break;
+
+        case CmdCommandPaletteNoFiles:
+            RunCommandPallette(win, true);
             break;
 
         case CmdClearHistory:
@@ -4652,6 +4659,14 @@ static LRESULT FrameOnCommand(MainWindow* win, HWND hwnd, UINT msg, WPARAM wp, L
 
         case CmdClose:
             CloseCurrentTab(win);
+            break;
+
+        case CmdNextTab:
+            TabsOnCtrlTab(win, false);
+            break;
+
+        case CmdPrevTab:
+            TabsOnCtrlTab(win, true);
             break;
 
         case CmdExit:
@@ -4761,6 +4776,7 @@ static LRESULT FrameOnCommand(MainWindow* win, HWND hwnd, UINT msg, WPARAM wp, L
             break;
 
         case CmdToggleBookmarks:
+        case CmdToggleTableOfContents:
             ToggleTocBox(win);
             break;
 
@@ -5451,8 +5467,7 @@ LRESULT CALLBACK WndProcSumatraFrame(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) 
 
 static TempStr GetFileSizeAsStrTemp(const char* path) {
     i64 fileSize = file::GetSize(path);
-    AutoFreeStr fileSizeStr = FormatFileSizeNoTrans(fileSize);
-    return str::DupTemp(fileSizeStr);
+    return FormatFileSizeNoTransTemp(fileSize);
 }
 
 void GetProgramInfo(str::Str& s) {

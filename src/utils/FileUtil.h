@@ -7,6 +7,7 @@ bool IsSep(char c);
 
 TempStr GetExtTemp(const char* path);
 const char* GetBaseNameTemp(const char* path);
+TempStr GetPathNoExtTemp(const char* path);
 
 TempStr GetDirTemp(const char* path);
 TempWstr GetDirTemp(const WCHAR* path);
@@ -43,7 +44,7 @@ HANDLE OpenReadOnly(const char*);
 ByteSlice ReadFileWithAllocator(const char* path, Allocator*);
 ByteSlice ReadFile(const char* path);
 int ReadN(const char* path, char* buf, size_t toRead);
-bool WriteFile(const char* path, ByteSlice);
+bool WriteFile(const char* path, const ByteSlice&);
 
 i64 GetSize(const char*);
 bool Delete(const char* path);

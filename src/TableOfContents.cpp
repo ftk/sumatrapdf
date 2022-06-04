@@ -482,30 +482,29 @@ static void TocContextMenu(ContextMenuEvent* ev) {
         embeddedFilePath = embeddedFile->path;
         // this is name of the file as set inside PDF file
         fileName = dti->dest->GetName();
-        char* ext = path::GetExtTemp(fileName);
-        bool canOpenEmbedded = str::EqI(ext, ".pdf");
+        bool canOpenEmbedded = str::EndsWithI(fileName, ".pdf");
         if (!canOpenEmbedded) {
-            menu::Remove(popup, CmdOpenEmbeddedPDF);
+            MenuRemove(popup, CmdOpenEmbeddedPDF);
         }
     }
     else {
         // TODO: maybe move this to BuildMenuFromMenuDef
-        menu::Remove(popup, CmdSaveEmbeddedFile);
-        menu::Remove(popup, CmdOpenEmbeddedPDF);
+        MenuRemove(popup, CmdSaveEmbeddedFile);
+        MenuRemove(popup, CmdOpenEmbeddedPDF);
     }
 
     if (pageNo > 0) {
         AutoFreeStr pageLabel = win->ctrl->GetPageLabel(pageNo);
         bool isBookmarked = gFavorites.IsPageInFavorites(filePath, pageNo);
         if (isBookmarked) {
-            menu::Remove(popup, CmdFavoriteAdd);
+            MenuRemove(popup, CmdFavoriteAdd);
 
             // %s and not %d because re-using translation from RebuildFavMenu()
             const char* tr = _TRA("Remove page %s from favorites");
             AutoFreeStr s = str::Format(tr, pageLabel.Get());
-            menu::SetText(popup, CmdFavoriteDel, s);
+            MenuSetText(popup, CmdFavoriteDel, s);
         } else {
-            menu::Remove(popup, CmdFavoriteDel);
+            MenuRemove(popup, CmdFavoriteDel);
             // %s and not %d because re-using translation from RebuildFavMenu()
             str::Str str = _TRA("Add page %s to favorites");
             ACCEL a;
@@ -514,11 +513,11 @@ static void TocContextMenu(ContextMenuEvent* ev) {
                 AppendAccelKeyToMenuString(str, a);
             }
             AutoFreeStr s(str::Format(str.Get(), pageLabel.Get()));
-            menu::SetText(popup, CmdFavoriteAdd, s);
+            MenuSetText(popup, CmdFavoriteAdd, s);
         }
     } else {
-        menu::Remove(popup, CmdFavoriteAdd);
-        menu::Remove(popup, CmdFavoriteDel);
+        MenuRemove(popup, CmdFavoriteAdd);
+        MenuRemove(popup, CmdFavoriteDel);
     }
     RemoveBadMenuSeparators(popup);
     MarkMenuOwnerDraw(popup);
@@ -572,7 +571,6 @@ static void AutoExpandTopLevelItems(TocItem* root) {
     if (!root) {
         return;
     }
-
     if (root->next && root->next->next) {
         return;
     }

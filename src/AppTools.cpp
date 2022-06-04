@@ -2,6 +2,7 @@
    License: GPLv3 */
 
 #include "utils/BaseUtil.h"
+#include "utils/StrFormat.h"
 #include "utils/WinDynCalls.h"
 #include "utils/CmdLineArgsIter.h"
 #include "utils/DbgHelpDyn.h"
@@ -143,6 +144,7 @@ enum EditorPathType {
 
 #define kRegCurrentVer "Software\\Microsoft\\Windows\\CurrentVersion"
 
+// clang-format off
 static struct {
     const char* binaryFilename;    // Editor's binary file name
     const char* inverseSearchArgs; // Parameters to be passed to the editor;
@@ -151,47 +153,164 @@ static struct {
     const char* regKey;            // Registry key path
     const char* regValue;          // Registry value name
 } editorRules[] = {
-    {"WinEdt.exe", "\"[Open(|%f|);SelPar(%l,8)]\"", BinaryPath, kRegCurrentVer "\\App Paths\\WinEdt.exe", nullptr},
-    {"WinEdt.exe", "\"[Open(|%f|);SelPar(%l,8)]\"", BinaryDir, "Software\\WinEdt", "Install Root"},
-    {"notepad++.exe", "-n%l \"%f\"", BinaryPath, kRegCurrentVer "\\App Paths\\notepad++.exe", nullptr},
-    {"notepad++.exe", "-n%l \"%f\"", BinaryDir, "Software\\Notepad++", nullptr},
-    {"notepad++.exe", "-n%l \"%f\"", BinaryPath, kRegCurrentVer "\\Uninstall\\Notepad++", "DisplayIcon"},
-    {"sublime_text.exe", "\"%f:%l\"", BinaryDir, kRegCurrentVer "\\Uninstall\\Sublime Text 3_is1", "InstallLocation"},
-    {"sublime_text.exe", "\"%f:%l\"", BinaryPath, kRegCurrentVer "\\Uninstall\\Sublime Text 3_is1", "DisplayIcon"},
-    {"sublime_text.exe", "\"%f:%l\"", BinaryDir, kRegCurrentVer "\\Uninstall\\Sublime Text 2_is1", "InstallLocation"},
-    {"sublime_text.exe", "\"%f:%l\"", BinaryPath, kRegCurrentVer "\\Uninstall\\Sublime Text 2_is1", "DisplayIcon"},
-    {"TeXnicCenter.exe", "/ddecmd \"[goto('%f', '%l')]\"", BinaryDir, "Software\\ToolsCenter\\TeXnicCenterNT",
-     "AppPath"},
-    {"TeXnicCenter.exe", "/ddecmd \"[goto('%f', '%l')]\"", BinaryDir, kRegCurrentVer "\\Uninstall\\TeXnicCenter_is1",
-     "InstallLocation"},
-    {"TeXnicCenter.exe", "/ddecmd \"[goto('%f', '%l')]\"", BinaryDir,
-     kRegCurrentVer "\\Uninstall\\TeXnicCenter Alpha_is1", "InstallLocation"},
-    {"TEXCNTR.exe", "/ddecmd \"[goto('%f', '%l')]\"", BinaryDir, "Software\\ToolsCenter\\TeXnicCenter", "AppPath"},
-    {"TEXCNTR.exe", "/ddecmd \"[goto('%f', '%l')]\"", BinaryDir, kRegCurrentVer "\\Uninstall\\TeXnicCenter_is1",
-     "InstallLocation"},
-    {"WinShell.exe", "-c \"%f\" -l %l", BinaryDir, kRegCurrentVer "\\Uninstall\\WinShell_is1", "InstallLocation"},
-    {"gvim.exe", "\"%f\" +%l", BinaryPath, "Software\\Vim\\Gvim", "path"},
-    {// TODO: add this rule only if the latex-suite for ViM is installed
-     // (http://vim-latex.sourceforge.net/documentation/latex-suite.txt)
-     "gvim.exe", "-c \":RemoteOpen +%l %f\"", BinaryPath, "Software\\Vim\\Gvim", "path"},
-    {"texmaker.exe", "\"%f\" -line %l", SiblingPath, kRegCurrentVer "\\Uninstall\\Texmaker", "UninstallString"},
     {
-        "TeXworks.exe", "-p=%l \"%f\"", BinaryDir,
-        kRegCurrentVer "\\Uninstall\\{41DA4817-4D2A-4D83-AD02-6A2D95DC8DCB}_is1", "InstallLocation",
+        "Code.exe",
+        "--goto \"%f:%l:%c\"",
+        BinaryPath,
+        kRegCurrentVer "\\Uninstall\\{771FD6B0-FA20-440A-A002-3B3BAC16DC50}_is1",
+        "DisplayIcon"
+    },
+    {
+        "WinEdt.exe",
+         "\"[Open(|%f|);SelPar(%l,8)]\"",
+        BinaryPath,
+        kRegCurrentVer "\\App Paths\\WinEdt.exe",
+        nullptr
+    },
+    {
+        "WinEdt.exe",
+        "\"[Open(|%f|);SelPar(%l,8)]\"",
+        BinaryDir,
+        "Software\\WinEdt",
+        "Install Root"
+    },
+    {
+        "notepad++.exe",
+        "-n%l \"%f\"",
+        BinaryPath,
+        kRegCurrentVer "\\App Paths\\notepad++.exe",
+        nullptr
+    },
+    {
+        "notepad++.exe",
+        "-n%l \"%f\"",
+        BinaryDir,
+        "Software\\Notepad++",
+        nullptr
+    },
+    {
+        "notepad++.exe",
+        "-n%l \"%f\"",
+        BinaryPath,
+        kRegCurrentVer "\\Uninstall\\Notepad++",
+        "DisplayIcon"
+    },
+    {
+        "sublime_text.exe",
+        "\"%f:%l:%c\"",
+        BinaryDir,
+        kRegCurrentVer "\\Uninstall\\Sublime Text 3_is1",
+        "InstallLocation"
+    },
+    {
+        "sublime_text.exe",
+        "\"%f:%l:%c\"",
+        BinaryPath,
+        kRegCurrentVer "\\Uninstall\\Sublime Text 3_is1",
+        "DisplayIcon"
+    },
+    {
+        "sublime_text.exe",
+        "\"%f:%l:%c\"",
+        BinaryDir,
+        kRegCurrentVer "\\Uninstall\\Sublime Text 2_is1",
+         "InstallLocation"
+    },
+    {
+        "sublime_text.exe",
+        "\"%f:%l:%c\"",
+        BinaryPath,
+        kRegCurrentVer "\\Uninstall\\Sublime Text 2_is1",
+        "DisplayIcon"
+    },
+    {
+        "sublime_text.exe",
+        "\"%f:%l:%c\"",
+        BinaryPath,
+        kRegCurrentVer "\\Uninstall\\Sublime Text_is1",
+        "DisplayIcon"
+    },
+    {
+        "TeXnicCenter.exe",
+        "/ddecmd \"[goto('%f', '%l')]\"",
+        BinaryDir,
+        "Software\\ToolsCenter\\TeXnicCenterNT",
+        "AppPath"
+    },
+    {
+        "TeXnicCenter.exe",
+        "/ddecmd \"[goto('%f', '%l')]\"",
+        BinaryDir,
+        kRegCurrentVer "\\Uninstall\\TeXnicCenter_is1",
+        "InstallLocation"
+    },
+    {
+        "TeXnicCenter.exe",
+        "/ddecmd \"[goto('%f', '%l')]\"",
+        BinaryDir,
+        kRegCurrentVer "\\Uninstall\\TeXnicCenter Alpha_is1",
+        "InstallLocation"
+    },
+    {
+        "TEXCNTR.exe",
+        "/ddecmd \"[goto('%f', '%l')]\"",
+        BinaryDir,
+        "Software\\ToolsCenter\\TeXnicCenter",
+        "AppPath"
+    },
+    {
+        "TEXCNTR.exe",
+        "/ddecmd \"[goto('%f', '%l')]\"",
+        BinaryDir,
+        kRegCurrentVer "\\Uninstall\\TeXnicCenter_is1",
+        "InstallLocation"
+    },
+    {
+        "WinShell.exe",
+        "-c \"%f\" -l %l",
+        BinaryDir,
+        kRegCurrentVer "\\Uninstall\\WinShell_is1",
+        "InstallLocation"
+    },
+    {
+        "gvim.exe",
+        "\"%f\" +%l",
+        BinaryPath,
+        "Software\\Vim\\Gvim",
+        "path"
+    },
+    {
+        // TODO: add this rule only if the latex-suite for ViM is installed
+        // (http://vim-latex.sourceforge.net/documentation/latex-suite.txt)
+        "gvim.exe",
+        "-c \":RemoteOpen +%l %f\"",
+        BinaryPath,
+        "Software\\Vim\\Gvim",
+        "path"
+    },
+    {
+        "texmaker.exe",
+        "\"%f\" -line %l",
+        SiblingPath,
+        kRegCurrentVer "\\Uninstall\\Texmaker",
+        "UninstallString"
+    },
+    {
+        "TeXworks.exe",
+        "-p=%l \"%f\"",
+        BinaryDir,
+        kRegCurrentVer "\\Uninstall\\{41DA4817-4D2A-4D83-AD02-6A2D95DC8DCB}_is1",
+        "InstallLocation",
         // TODO: find a way to detect where emacs is installed
         // "emacsclientw.exe","+%l \"%f\"", BinaryPath, "???", "???",
-    }};
+    }
+};
+
+// clang-format on
 
 // Detect TeX editors installed on the system and construct the
 // corresponding inverse search commands.
-//
-// Parameters:
-//      hwndCombo   -- (optional) handle to a combo list that will be filled with the list of possible inverse search
-//      commands.
-// Returns:
-//      the inverse search command of the first detected editor (the caller needs to free() the result).
-char* AutoDetectInverseSearchCommands(HWND hwndCombo) {
-    char* firstEditor = nullptr;
+void AutoDetectInverseSearchCommands(StrVec& res) {
     StrVec foundExes;
 
     for (auto& rule : editorRules) {
@@ -224,30 +343,21 @@ char* AutoDetectInverseSearchCommands(HWND hwndCombo) {
             continue;
         }
 
-        AutoFreeStr editorCmd(str::Format("\"%s\" %s", exePath, inverseSearchArgs));
+        AutoFreeStr cmd = str::Format("\"%s\" %s", exePath, inverseSearchArgs);
 
-        if (!hwndCombo) {
-            // no need to fill a combo box: return immeditately after finding an editor.
-            return editorCmd.StealData();
-        }
+        res.Append(cmd);
 
+#if 0
         WCHAR* ws = ToWstrTemp(editorCmd);
         ComboBox_AddString(hwndCombo, ws);
         if (!firstEditor) {
             firstEditor = editorCmd.StealData();
         }
+#endif
         foundExes.Append(exePath);
     }
 
-    // Fall back to notepad as a default handler
-    if (!firstEditor) {
-        firstEditor = str::Dup("notepad %f");
-        if (hwndCombo) {
-            WCHAR* ws = ToWstrTemp(firstEditor);
-            ComboBox_AddString(hwndCombo, ws);
-        }
-    }
-    return firstEditor;
+    res.Append("notepad %f");
 }
 
 #define UWM_DELAYED_SET_FOCUS (WM_APP + 1)
@@ -494,8 +604,7 @@ constexpr double GB = (double)1024 * (double)1024 * (double)1024;
 
 // Format the file size in a short form that rounds to the largest size unit
 // e.g. "3.48 GB", "12.38 MB", "23 KB"
-// Caller needs to free the result.
-static char* FormatSizeSuccint(i64 size) {
+static TempStr FormatSizeSuccintTemp(i64 size) {
     const char* unit = nullptr;
     double s = (double)size;
 
@@ -510,30 +619,17 @@ static char* FormatSizeSuccint(i64 size) {
         unit = _TRA("KB");
     }
 
-    AutoFreeStr sizestr = str::FormatFloatWithThousandSep(s);
+    char* sizestr = str::FormatFloatWithThousandSepTemp(s);
     if (!unit) {
-        return sizestr.StealData();
+        return sizestr;
     }
-    return str::Format("%s %s", sizestr.Get(), unit);
-}
-
-// format file size in a readable way e.g. 1348258 is shown
-// as "1.29 MB (1,348,258 Bytes)"
-// Caller needs to free the result
-char* FormatFileSize(i64 size) {
-    if (size <= 0) {
-        return str::Format("%d", (int)size);
-    }
-    AutoFreeStr n1(FormatSizeSuccint(size));
-    AutoFreeStr n2(str::FormatNumWithThousandSep(size));
-    return str::Format("%s (%s %s)", n1.Get(), n2.Get(), _TRA("Bytes"));
+    return fmt::FormatTemp("%s %s", sizestr, unit);
 }
 
 // Format the file size in a short form that rounds to the largest size unit
 // e.g. "3.48 GB", "12.38 MB", "23 KB"
 // To be used in a context where translations are not yet available
-// Caller needs to free the result.
-static char* FormatSizeSuccintNoTrans(i64 size) {
+static TempStr FormatSizeSuccintNoTransTemp(i64 size) {
     const char* unit = nullptr;
     double s = (double)size;
 
@@ -548,23 +644,33 @@ static char* FormatSizeSuccintNoTrans(i64 size) {
         unit = "KB";
     }
 
-    AutoFreeStr sizestr = str::FormatFloatWithThousandSep(s);
+    char* sizestr = str::FormatFloatWithThousandSepTemp(s);
     if (!unit) {
-        return sizestr.StealData();
+        return sizestr;
     }
-    return str::Format("%s %s", sizestr.Get(), unit);
+    return fmt::FormatTemp("%s %s", sizestr, unit);
 }
 
 // format file size in a readable way e.g. 1348258 is shown
 // as "1.29 MB (1,348,258 Bytes)"
-// Caller needs to free the result
-char* FormatFileSizeNoTrans(i64 size) {
+TempStr FormatFileSizeTemp(i64 size) {
+    if (size <= 0) {
+        return fmt::FormatTemp("%d", size);
+    }
+    char* n1 = FormatSizeSuccintTemp(size);
+    char* n2 = str::FormatNumWithThousandSepTemp(size);
+    return fmt::FormatTemp("%s (%s %s)", n1, n2, _TRA("Bytes"));
+}
+
+// format file size in a readable way e.g. 1348258 is shown
+// as "1.29 MB (1,348,258 Bytes)"
+TempStr FormatFileSizeNoTransTemp(i64 size) {
     if (size <= 0) {
         return str::Format("%d", (int)size);
     }
-    AutoFreeStr n1(FormatSizeSuccintNoTrans(size));
-    AutoFreeStr n2(str::FormatNumWithThousandSep(size));
-    return str::Format("%s (%s %s)", n1.Get(), n2.Get(), "Bytes");
+    char* n1 = FormatSizeSuccintNoTransTemp(size);
+    char* n2 = str::FormatNumWithThousandSepTemp(size);
+    return fmt::FormatTemp("%s (%s %s)", n1, n2, "Bytes");
 }
 
 // returns true if file exists

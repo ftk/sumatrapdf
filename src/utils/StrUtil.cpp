@@ -2,6 +2,7 @@
    License: Simplified BSD (see COPYING.BSD) */
 
 #include "BaseUtil.h"
+#include "StrFormat.h"
 
 #if !defined(_MSC_VER)
 #define _strdup strdup
@@ -151,6 +152,18 @@ bool isLegalUTF8String(const u8** source, const u8* sourceEnd) {
 
 // --- end of Unicode, Inc. utf8 code
 
+bool IsEqual(const ByteSlice& d1, const ByteSlice& d2) {
+    if (d1.sz != d2.sz) {
+        return false;
+    }
+    if (d1.sz == 0) {
+        return true;
+    }
+    CrashIf(!d1.d || !d2.d);
+    int res = memcmp(d1.d, d2.d, d1.sz);
+    return res == 0;
+}
+
 namespace str {
 
 size_t Len(const char* s) {
@@ -167,10 +180,6 @@ void Free(const char* s) {
 
 void Free(const u8* s) {
     free((void*)s);
-}
-
-void Free(ByteSlice d) {
-    free((void*)d.data());
 }
 
 void Free(const WCHAR* s) {
@@ -211,7 +220,7 @@ char* Dup(const char* s, size_t cch) {
     return Dup(nullptr, s, cch);
 }
 
-char* Dup(const ByteSlice d) {
+char* Dup(const ByteSlice& d) {
     return Dup(nullptr, (const char*)d.data(), d.size());
 }
 
@@ -237,7 +246,7 @@ bool Eq(const char* s1, const char* s2) {
     return 0 == strcmp(s1, s2);
 }
 
-bool Eq(ByteSlice sp1, ByteSlice sp2) {
+bool Eq(const ByteSlice& sp1, const ByteSlice& sp2) {
     if (sp1.size() != sp2.size()) {
         return false;
     }
@@ -333,11 +342,6 @@ bool StartsWithI(const char* s, const char* prefix) {
     return 0 == _strnicmp(s, prefix, str::Len(prefix));
 }
 
-ByteSlice ToSpan(const char* s) {
-    size_t n = str::Len(s);
-    return {(u8*)s, n};
-}
-
 bool Contains(const char* s, const char* txt) {
     const char* p = str::Find(s, txt);
     bool contains = p != nullptr;
@@ -421,6 +425,13 @@ void ReplaceWithCopy(const char** s, const char* snew) {
     if (*s != snew) {
         str::Free(*s);
         *s = str::Dup(snew);
+    }
+}
+
+void ReplaceWithCopy(const char** s, const ByteSlice& d) {
+    if (*s != (const char*)d.data()) {
+        str::Free(*s);
+        *s = str::Dup((const char*)d.data(), d.size());
     }
 }
 
@@ -1011,10 +1022,10 @@ int CmpNatural(const char* a, const char* b) {
     while (diff == 0) {
         // ignore leading and trailing spaces, and differences in whitespace only
         if (a == aStart || !*a || !*b || IsWs(*a) && IsWs(*b)) {
-            for (; IsWs(*a); a++) {
+            for (; a && IsWs(*a); a++) {
                 // do nothing
             }
-            for (; IsWs(*b); b++) {
+            for (; b && IsWs(*b); b++) {
                 // do nothing
             }
         }
@@ -1503,16 +1514,16 @@ ByteSlice Str::AsByteSlice() const {
 }
 
 ByteSlice Str::StealAsByteSlice() {
-    size_t len = size();
+    size_t n = size();
     char* d = StealData();
-    return {(u8*)d, len};
+    return {(u8*)d, n};
 }
 
 bool Str::Append(const u8* src, size_t size) {
     return this->Append((const char*)src, size);
 }
 
-bool Str::AppendSlice(ByteSlice d) {
+bool Str::AppendSlice(const ByteSlice& d) {
     if (d.empty()) {
         return true;
     }
@@ -2273,19 +2284,16 @@ size_t BufAppend(WCHAR* dst, size_t dstCchSize, const WCHAR* s) {
 
 // format a number with a given thousand separator e.g. it turns 1234 into "1,234"
 // Caller needs to free() the result.
-char* FormatNumWithThousandSep(i64 num, LCID locale) {
+char* FormatNumWithThousandSepTemp(i64 num, LCID locale) {
     WCHAR thousandSepW[4]{};
     if (!GetLocaleInfoW(locale, LOCALE_STHOUSAND, thousandSepW, dimof(thousandSepW))) {
         str::BufSet(thousandSepW, dimof(thousandSepW), ",");
     }
     char* thousandSep = ToUtf8Temp(thousandSepW);
-    AutoFreeStr buf(str::Format("%Iu", (size_t)num));
+    char* buf = fmt::FormatTemp("%d", num);
 
-    size_t resLen = str::Len(buf) + str::Len(thousandSep) * (str::Len(buf) + 3) / 3 + 1;
-    char* res = AllocArray<char>(resLen);
-    if (!res) {
-        return nullptr;
-    }
+    char res[128] = {0};
+    int resLen = dimof(res);
     char* next = res;
     int i = 3 - (str::Len(buf) % 3);
     for (const char* src = buf; *src;) {
@@ -2297,29 +2305,33 @@ char* FormatNumWithThousandSep(i64 num, LCID locale) {
     }
     *next = '\0';
 
-    return res;
+    return str::DupTemp(res);
 }
 
 // Format a floating point number with at most two decimal after the point
 // Caller needs to free the result.
-char* FormatFloatWithThousandSep(double number, LCID locale) {
+char* FormatFloatWithThousandSepTemp(double number, LCID locale) {
     i64 num = (i64)(number * 100 + 0.5);
 
-    AutoFreeStr tmp(FormatNumWithThousandSep(num / 100, locale));
-    WCHAR decimalW[4];
+    char* tmp = FormatNumWithThousandSepTemp(num / 100, locale);
+    WCHAR decimalW[4] = {0};
     if (!GetLocaleInfoW(locale, LOCALE_SDECIMAL, decimalW, dimof(decimalW))) {
         decimalW[0] = '.';
         decimalW[1] = 0;
     }
-    char* decimal = ToUtf8Temp(decimalW);
+    char decimal[4];
+    int i = 0;
+    for (WCHAR c : decimalW) {
+        decimal[i++] = (char)c;
+    }
 
-    // always add between one and two decimals after the point
-    AutoFreeStr buf(str::Format("%s%s%02d", tmp.Get(), decimal, (int)(num % 100)));
+    // add between one and two decimals after the point
+    char* buf = fmt::FormatTemp("%s%s%02d", tmp, decimal, num % 100);
     if (str::EndsWith(buf, "0")) {
         buf[str::Len(buf) - 1] = '\0';
     }
 
-    return buf.StealData();
+    return buf;
 }
 
 // http://rosettacode.org/wiki/Roman_numerals/Encode#C.2B.2B
@@ -2365,10 +2377,10 @@ int CmpNatural(const WCHAR* a, const WCHAR* b) {
     for (; 0 == diff; a++, b++) {
         // ignore leading and trailing spaces, and differences in whitespace only
         if (a == aStart || !*a || !*b || IsWs(*a) && IsWs(*b)) {
-            for (; IsWs(*a); a++) {
+            for (; a && IsWs(*a); a++) {
                 // do nothing
             }
-            for (; IsWs(*b); b++) {
+            for (; b && IsWs(*b); b++) {
                 // do nothing
             }
         }
@@ -2635,7 +2647,7 @@ char* StrVec::operator[](int idx) const {
 }
 
 char* StrVec::operator[](size_t idx) const {
-    CrashIf(idx < 0);
+    CrashIf((int)idx < 0);
     return at((int)idx);
 }
 
@@ -2645,10 +2657,6 @@ char* StrVec::at(int idx) const {
     u32 start = index.at(idx);
     if (start == kNullIdx) {
         return nullptr;
-    }
-    u32 end = (u32)strings.size();
-    if (idx + 1 < n) {
-        end = (u32)index.at(idx + 1);
     }
     char* s = strings.LendData() + start;
     return s;
@@ -2769,53 +2777,6 @@ void StrVec::Sort(StrLessFunc lessFn) {
     });
 }
 
-bool StrVec::GetSortedView(StrVecSortedView& view, StrLessFunc lessFn) const {
-    view.v = (StrVec*)this;
-    view.sortedIndex = this->index; // TOOD: verify this works as expected
-
-    if (lessFn == nullptr) {
-        lessFn = strLess;
-    }
-
-    auto& sortedIndex = view.sortedIndex;
-    // sortedIndex is 0...Size()-1 value
-    // that points into index Vec
-    // starty by fillng sortedIndex with 0...Size()-1
-    // and then sort by swapping indexes
-    u32 n = (u32)index.size();
-    sortedIndex.Reset();
-    for (u32 i = 0; i < n; i++) {
-        sortedIndex.Append(i);
-    }
-    std::sort(sortedIndex.begin(), sortedIndex.end(), [this, lessFn](u32 i1, u32 i2) -> bool {
-        const char* is1 = at((int)i1);
-        const char* is2 = at((int)i2);
-        bool ret = lessFn(is1, is2);
-        return ret;
-    });
-
-    return true;
-}
-
-bool StrVec::GetSortedViewNoCase(StrVecSortedView& view) const {
-    return GetSortedView(view, strLessNoCase);
-}
-
-int StrVecSortedView::Size() const {
-    return sortedIndex.isize();
-}
-
-char* StrVecSortedView::at(int i) const {
-    CrashIf(sortedIndex.size() != v->index.size());
-
-    u32 i2 = sortedIndex[i];
-    return v->at((int)i2);
-}
-
-char* StrVecSortedView::operator[](int i) const {
-    return at(i);
-}
-
 /* splits a string into several substrings, separated by the separator
 (optionally collapsing several consecutive separators into one);
 e.g. splitting "a,b,,c," by "," results in the list "a", "b", "", "c", ""
@@ -2857,4 +2818,9 @@ char* Join(const StrVec& v, const char* joint) {
         tmp.Append(s);
     }
     return tmp.StealData();
+}
+
+ByteSlice ToByteSlice(const char* s) {
+    size_t n = str::Len(s);
+    return {(u8*)s, n};
 }

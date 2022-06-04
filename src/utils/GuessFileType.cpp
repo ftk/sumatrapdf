@@ -123,7 +123,7 @@ static Kind gExtsKind[] = {DEF_EXT_KIND(KIND)};
 #undef KIND
 
 static Kind GetKindByFileExt(const char* path) {
-    auto ext = path::GetExtTemp(path);
+    char* ext = path::GetExtTemp(path);
     int idx = seqstrings::StrToIdxIS(gFileExts, ext);
     if (idx < 0) {
         return nullptr;
@@ -192,7 +192,7 @@ static FileSig gFileSigs[] = {FILE_SIGS(MK_SIG)};
 #undef MK_SIG
 
 // PDF files have %PDF-${ver} somewhere in the beginning of the file
-static bool IsPdfFileContent(ByteSlice d) {
+static bool IsPdfFileContent(const ByteSlice& d) {
     if (d.size() < 8) {
         return false;
     }
@@ -213,7 +213,7 @@ static bool IsPdfFileContent(ByteSlice d) {
     return false;
 }
 
-static bool IsPSFileContent(ByteSlice d) {
+static bool IsPSFileContent(const ByteSlice& d) {
     char* header = (char*)d.data();
     size_t n = d.size();
     if (n < 64) {
@@ -249,16 +249,31 @@ static Kind DetectHicAndAvif(const ByteSlice& d) {
     }
     char* s = (char*)d.data();
     char* hdr = s + 4;
-    bool isheic = str::StartsWith(hdr, "ftypheic");
-    bool ismif = str::StartsWith(hdr, "ftypmif1");
-    bool isAvif = str::StartsWith(hdr, "ftypavif");
-    if (!(isheic || ismif)) {
+    // ftyp values per https://github.com/strukturag/libheif/issues/83
+    /*
+        'heic': the usual HEIF images
+        'heix': 10bit images, or anything that uses h265 with range extension
+        'hevc', 'hevx': brands for image sequences
+        'heim': multiview
+        'heis': scalable
+        'hevm': multiview sequence
+        'hevs': scalable sequence
+
+        'mif1' also happens?
+    */
+    // TODO: support more ftyp types?
+    if (str::StartsWith(hdr, "ftypheic")) {
         return kindFileHeic;
     }
-    if (isAvif) {
+    if (str::StartsWith(hdr, "ftypheix")) {
+        return kindFileHeic;
+    }
+    if (str::StartsWith(hdr, "ftypmif1")) {
+        return kindFileHeic;
+    }
+    if (str::StartsWith(hdr, "ftypavif")) {
         return kindFileAvif;
     }
-
     hdr = s + 16;
     if (str::StartsWith(hdr, "mif1heic")) {
         return kindFileHeic;

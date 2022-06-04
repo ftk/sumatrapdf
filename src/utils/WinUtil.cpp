@@ -530,6 +530,28 @@ TempStr GetSpecialFolderTemp(int csidl, bool createIfMissing) {
     return ToUtf8Temp(path);
 }
 
+// temp directory
+TempStr GetTempDirTemp() {
+    WCHAR dir[MAX_PATH] = {0};
+#if 0 // TODO: only available in 20348, not yet present in SDK
+    DWORD cch = 0;
+    if (DynGetTempPath2W) {
+        cch = DynGetTempPath2W(dimof(dir), dir);
+    }
+    if (cch == 0) {
+        cch = GetTempPathW(dimof(dir), dir);
+    }
+#else
+    DWORD cch = GetTempPathW(dimof(dir), dir);
+#endif
+    if (cch == 0) {
+        return {};
+    }
+    // TODO: should handle this
+    CrashIf(cch >= dimof(dir));
+    return ToUtf8Temp(dir, cch);
+}
+
 void DisableDataExecution() {
     // first try the documented SetProcessDEPPolicy
     if (DynSetProcessDEPPolicy) {
@@ -1358,9 +1380,7 @@ int GetSizeOfDefaultGuiFont() {
     return res;
 }
 
-DoubleBuffer::DoubleBuffer(HWND hwnd, Rect rect) : hTarget(hwnd), rect(rect) {
-    hdcCanvas = ::GetDC(hwnd);
-
+DoubleBuffer::DoubleBuffer(HWND hwnd, Rect rect) : hTarget(hwnd), hdcCanvas(::GetDC(hwnd)), rect(rect) {
     if (rect.IsEmpty()) {
         return;
     }
@@ -1403,8 +1423,7 @@ void DoubleBuffer::Flush(HDC hdc) const {
     }
 }
 
-DeferWinPosHelper::DeferWinPosHelper() {
-    hdwp = ::BeginDeferWindowPos(32);
+DeferWinPosHelper::DeferWinPosHelper() : hdwp(::BeginDeferWindowPos(32)) {
 }
 
 DeferWinPosHelper::~DeferWinPosHelper() {
@@ -1439,31 +1458,29 @@ void DeferWinPosHelper::MoveWindow(HWND hWnd, Rect r) {
     this->MoveWindow(hWnd, r.x, r.y, r.dx, r.dy);
 }
 
-namespace menu {
-
-void SetChecked(HMENU m, int id, bool isChecked) {
+void MenuSetChecked(HMENU m, int id, bool isChecked) {
     CrashIf(id < 0);
     CheckMenuItem(m, (UINT)id, MF_BYCOMMAND | (isChecked ? MF_CHECKED : MF_UNCHECKED));
 }
 
-bool SetEnabled(HMENU m, int id, bool isEnabled) {
+bool MenuSetEnabled(HMENU m, int id, bool isEnabled) {
     CrashIf(id < 0);
     BOOL ret = EnableMenuItem(m, (UINT)id, MF_BYCOMMAND | (isEnabled ? MF_ENABLED : MF_GRAYED));
     return ret != -1;
 }
 
-void Remove(HMENU m, int id) {
+void MenuRemove(HMENU m, int id) {
     CrashIf(id < 0);
     RemoveMenu(m, (UINT)id, MF_BYCOMMAND);
 }
 
-void Empty(HMENU m) {
+void MenuEmpty(HMENU m) {
     while (RemoveMenu(m, 0, MF_BYPOSITION)) {
         // no-op
     }
 }
 
-void SetText(HMENU m, int id, const WCHAR* s) {
+void MenuSetText(HMENU m, int id, const WCHAR* s) {
     CrashIf(id < 0);
     MENUITEMINFOW mii{};
     mii.cbSize = sizeof(mii);
@@ -1480,16 +1497,16 @@ void SetText(HMENU m, int id, const WCHAR* s) {
     }
 }
 
-void SetText(HMENU m, int id, const char* s) {
+void MenuSetText(HMENU m, int id, const char* s) {
     WCHAR* ws = ToWstrTemp(s);
-    SetText(m, id, ws);
+    MenuSetText(m, id, ws);
 }
 
 /* Make a string safe to be displayed as a menu item
    (preserving all & so that they don't get swallowed)
    if no change is needed, the string is returned as is,
    else it's also saved in newResult for automatic freeing */
-char* ToSafeStringTemp(const char* s) {
+char* MenuToSafeStringTemp(const char* s) {
     auto str = str::DupTemp(s);
     if (!str::FindChar(str, '&')) {
         return str;
@@ -1497,7 +1514,6 @@ char* ToSafeStringTemp(const char* s) {
     AutoFreeStr safe = str::Replace(str, "&", "&&");
     return str::DupTemp(safe.Get());
 }
-} // namespace menu
 
 HFONT CreateSimpleFont(HDC hdc, const char* fontName, int fontSize) {
     WCHAR* fontNameW = ToWstrTemp(fontName);
@@ -1536,7 +1552,7 @@ void SetMenuFontSize(int fontSize) {
     // CrashIf(true);
 }
 
-IStream* CreateStreamFromData(ByteSlice d) {
+IStream* CreateStreamFromData(const ByteSlice& d) {
     if (d.empty()) {
         return nullptr;
     }
@@ -1899,7 +1915,7 @@ void UpdateBitmapColors(HBITMAP hbmp, COLORREF textColor, COLORREF bgColor) {
     // color order in DIB is blue-green-red-alpha
     byte rt, gt, bt;
     UnpackColor(textColor, rt, gt, bt);
-    int base[4] = {bt, gt, rt, 0};
+    const int base[4] = {bt, gt, rt, 0};
     byte rb, gb, bb;
     UnpackColor(bgColor, rb, gb, bb);
     int diff[4] = {(int)bb - base[0], (int)gb - base[1], (int)rb - base[2], 255};
@@ -2428,21 +2444,20 @@ Size ButtonGetIdealSize(HWND hwnd) {
     return res;
 }
 
-std::tuple<const u8*, DWORD, HGLOBAL> LockDataResource(int id) {
+ByteSlice LockDataResource(int id) {
     auto h = GetModuleHandleW(nullptr);
     WCHAR* name = MAKEINTRESOURCEW(id);
     HRSRC resSrc = FindResourceW(h, name, RT_RCDATA);
     if (!resSrc) {
-        return {nullptr, 0, 0};
+        return {};
     }
     HGLOBAL res = LoadResource(nullptr, resSrc);
     if (!res) {
-        return {nullptr, 0, 0};
+        return {};
     }
-
-    auto* data = (const u8*)LockResource(res);
+    const u8* data = (const u8*)LockResource(res);
     DWORD dataSize = SizeofResource(nullptr, resSrc);
-    return {data, dataSize, res};
+    return {data, dataSize};
 }
 
 bool IsValidDelayType(int type) {
@@ -2627,18 +2642,18 @@ bool DestroyIconSafe(HICON* h) {
     return ToBool(res);
 }
 
-bool TextOutUtf8(HDC hdc, int x, int y, const char* s, size_t sLen) {
+bool TextOutUtf8(HDC hdc, int x, int y, const char* s, int sLen) {
     if (!s) {
         return false;
     }
     if (sLen <= 0) {
-        sLen = str::Len(s);
+        sLen = (int)str::Len(s);
     }
-    WCHAR* ws = ToWstrTemp(s, sLen);
+    WCHAR* ws = ToWstrTemp(s, (size_t)sLen);
     if (!ws) {
         return false;
     }
-    sLen = str::Len(ws); // TODO: can this be different after converting to WCHAR?
+    sLen = (int)str::Len(ws); // TODO: can this be different after converting to WCHAR?
     return TextOutW(hdc, x, y, ws, (int)sLen);
 }
 
