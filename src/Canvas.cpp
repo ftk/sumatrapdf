@@ -1271,58 +1271,22 @@ static LRESULT OnGesture(MainWindow* win, UINT msg, WPARAM wp, LPARAM lp) {
 
                 // on left / right flick, go to next / prev page
                 // unless we can pan/scroll the document
-                bool isFlickX = (gi.dwFlags & GF_INERTIA) && (abs(deltaX) > abs(deltaY)) && (abs(deltaX) > 26);
-                // logf("OnGesture: GID_PAN, flags: %d (%s), dx: %d, dy: %d, isFlick: %d\n", gi.dwFlags,
-                // GiFlagsToStr(gi.dwFlags), deltaX, deltaY, (int)isFlickX);
-                bool flipPage = false;
-                if (!dm->NeedHScroll()) {
-                    // if the page is fully visible
-                    flipPage = true;
-                    // logf("flipPage becaues !dm->NeedHScroll()");
-                }
-                if (deltaX > 0 && !dm->CanScrollRight()) {
-                    flipPage = true;
-                    // logf("flipPage becaues deltaX > 0 && !dm->CanScrollRight()");
-                }
-                if (deltaX < 0 && !dm->CanScrollLeft()) {
-                    flipPage = true;
-                    // logf("flipPage becaues deltaX < 0 && !dm->CanScrollLeft()");
-                }
-
-                if (isFlickX && flipPage) {
+                bool isFlickX = (gi.dwFlags & GF_INERTIA) && (abs(deltaX) > abs(deltaY));
+                bool enableFlick = !dm || !dm->NeedHScroll() || (deltaX > 0 && !dm->CanScrollRight()) || (deltaX < 0 && !dm->CanScrollLeft());
+                if (isFlickX && enableFlick) {
                     if (deltaX < 0) {
                         win->ctrl->GoToPrevPage();
-                        // TODO: scroll to show the right-hand part
-                        int x = dm->canvasSize.dx - dm->viewPort.dx;
-                        // logf("x: %d\n");
-                        dm->ScrollXTo(x);
                     } else if (deltaX > 0) {
                         win->ctrl->GoToNextPage();
-                        dm->ScrollXTo(0);
                     }
-                    // When we switch pages prevent further pan movement
-                    // caused by the inertia
-                    touchState.panStarted = false;
-                } else {
+                    // When we switch pages prevent further pan movement caused by the inertia
+                    if (dm) {
+                        dm->ScrollXBy(0);
+                    }
+                    win->touchState.panStarted = false;
+                } else if (dm) {
                     // pan / scroll
-                    bool canScrollRightBefore = dm->CanScrollRight();
-                    bool canScrollLeftBefore = dm->CanScrollLeft();
                     win->MoveDocBy(deltaX, deltaY);
-
-                    // if pan to the rigth edge, we want to "sticK" to it
-                    // and only flip page on the next flick motion
-                    bool stopPanning = false;
-                    if (canScrollRightBefore != dm->CanScrollRight()) {
-                        stopPanning = true;
-                        // logf("stopPanning because canScrollRightBefore != dm->CanScrollRight()\n");
-                    }
-                    if (canScrollLeftBefore != dm->CanScrollLeft()) {
-                        stopPanning = true;
-                        // logf("stopPanning because canScrollLeftBefore != dm->CanScrollLeft()\n");
-                    }
-                    if (stopPanning) {
-                        touchState.panStarted = false;
-                    }
                 }
             }
             break;
