@@ -629,52 +629,161 @@ struct TreeView : Wnd {
 
 TreeItem GetOrSelectTreeItemAtPos(ContextMenuEvent* args, POINT& pt);
 
+//--- TabsCtrl
+
+using Gdiplus::PathData;
+
+#define kTabBarDy 24
+#define kTabMinDx 100
+
+struct TabsCtrl;
+
+#define kTabDefaultBgCol (COLORREF) - 1
+
+// TODO: make it private to WinGui.cpp
+struct TabPainter {
+    TabsCtrl* tabsCtrl = nullptr;
+    PathData* data = nullptr;
+    Size tabSize;
+
+    HWND hwnd = nullptr;
+
+    // TODO: set those to reasonable defaults
+    COLORREF currBgCol = kTabDefaultBgCol;
+    COLORREF tabBackgroundBg = 0;
+    COLORREF tabBackgroundText = 0;
+    COLORREF tabBackgroundCloseX = 0;
+    COLORREF tabBackgroundCloseCircle = 0;
+    COLORREF tabSelectedBg = 0;
+    COLORREF tabSelectedText = 0;
+    COLORREF tabSelectedCloseX = 0;
+    COLORREF tabSelectedCloseCircle = 0;
+    COLORREF tabHighlightedBg = 0;
+    COLORREF tabHighlightedText = 0;
+    COLORREF tabHighlightedCloseX = 0;
+    COLORREF tabHighlightedCloseCircle = 0;
+    COLORREF tabHoveredCloseX = 0;
+    COLORREF tabHoveredCloseCircle = 0;
+    COLORREF tabClickedCloseX = 0;
+    COLORREF tabClickedCloseCircle = 0;
+
+    bool inTitleBar = false;
+
+    TabPainter(TabsCtrl* ctrl, Size tabSize);
+    ~TabPainter();
+    bool Reshape(int dx, int dy);
+    int IndexFromPoint(int x, int y, bool* inXbutton = nullptr) const;
+    void Paint(HDC hdc, RECT& rc) const;
+    int Count() const;
+};
+
+struct TabClosedEvent {
+    TabsCtrl* tabs = nullptr;
+    int tabIdx = 0;
+};
+
+using TabClosedHandler = std::function<void(TabClosedEvent*)>;
+
+struct TabsSelectionChangingEvent {
+    TabsCtrl* tabs = nullptr;
+    int tabIdx;
+};
+
+// return true to prevent changing tabs
+using TabsSelectionChangingHandler = std::function<bool(TabsSelectionChangingEvent*)>;
+
+struct TabsSelectionChangedEvent {
+    TabsCtrl* tabs = nullptr;
+    int tabIdx;
+};
+
+using TabsSelectionChangedHandler = std::function<void(TabsSelectionChangedEvent*)>;
+
+struct TabDraggedEvent {
+    TabsCtrl* tabs = nullptr;
+    int tab1 = -1;
+    int tab2 = -1;
+};
+
+using TabDraggedHandler = std::function<void(TabDraggedEvent*)>;
+
 struct TabsCreateArgs {
     HWND parent = nullptr;
     HFONT font = nullptr;
     bool createToolTipsHwnd = false;
     int ctrlID = 0;
+    Size tabSize = {};
+};
+
+struct TabPainter;
+
+struct TabInfo {
+    char* text = nullptr;
+    char* tooltip = nullptr;
+    UINT_PTR userData = 0;
+
+    TabInfo() = default;
+    ~TabInfo();
 };
 
 struct TabsCtrl : Wnd {
-    str::Str lastTabText;
+    int ctrlID = 0;
+    TabPainter* painter = nullptr;
     bool createToolTipsHwnd = false;
-    str::Str currTooltipText;
+    char* currTooltipText = nullptr; // not owned by us
 
-    StrVec tooltips;
+    Vec<TabInfo*> tabs;
+
+    // tracking state of which tab is highlighted etc.
+    int tabHighlighted = -1;
+    int tabHighlightedClose = -1;
+    int tabBeingClosed = -1;
+    bool isDragging = false;
+
+    TabClosedHandler onTabClosed = nullptr;
+    TabsSelectionChangingHandler onSelectionChanging = nullptr;
+    TabsSelectionChangedHandler onSelectionChanged = nullptr;
+    TabDraggedHandler onTabDragged = nullptr;
 
     TabsCtrl();
     ~TabsCtrl() override;
 
     HWND Create(TabsCreateArgs&);
+
+    LRESULT WndProc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) override;
     LRESULT OnNotifyReflect(WPARAM, LPARAM) override;
 
     Size GetIdealSize() override;
 
-    int InsertTab(int idx, const char* sv);
+    int InsertTab(int idx, TabInfo*);
+    TabInfo* GetTab(int idx);
 
-    void RemoveTab(int idx);
-    void RemoveAllTabs();
+    void SetTextAndTooltip(int idx, const char* text, const char* tooltip);
 
-    void SetTabText(int idx, const char* sv);
-
-    void SetTooltip(int idx, const char*);
-    const char* GetTooltip(int idx);
-
-    char* GetTabText(int idx);
-
-    int GetSelectedTabIndex();
-    int SetSelectedTabByIndex(int idx);
-
-    void SetItemSize(Size sz);
     int GetTabCount();
 
-    void SetToolTipsHwnd(HWND);
-    HWND GetToolTipsHwnd();
+    UINT_PTR RemoveTab(int idx);
 
-    void MaybeUpdateTooltip();
-    void MaybeUpdateTooltipText(int idx);
+    template <typename T>
+    T* RemoveTab(int idx) {
+        UINT_PTR res = RemoveTab(idx);
+        return (T*)res;
+    }
+    void RemoveAllTabs();
+
+    int GetSelected();
+    int SetSelected(int idx);
+
+    void SetTabSize(Size sz);
+
+    HWND GetToolTipsHwnd();
 };
+
+template <typename T>
+T* GetTabsUserData(TabsCtrl* tabs, int idx) {
+    TabInfo* tabInfo = tabs->GetTab(idx);
+    return (T*)tabInfo->userData;
+}
 
 void DeleteWnd(Static**);
 void DeleteWnd(Button**);

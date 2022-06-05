@@ -44,7 +44,6 @@ function makelzsa_files()
     "GeomUtil.*",
     "LzmaSimpleArchive.*",
     "StrconvUtil.*",
-    "StringViewUtil.*",
     "StrUtil.*",
     "TempAllocator.*",
     "Log.*",
@@ -243,6 +242,113 @@ function jbig2dec_files()
     "jbig2_symbol_dict.c",
     "jbig2_text.c",
   })
+end
+
+function libheif_files() 
+  files_in_dir("ext/libheif/libheif", {
+    "bitstream.*",
+    "box.*",
+    "error.*",
+    "heif.*",
+    "heif_avif.*",
+    "heif_colorconversion.*",
+    "heif_context.*",
+    "heif_decoder_dav1d.*",
+    "heif_file.*",
+    "heif_hevc.*",
+    "heif_image.*",
+    "heif_plugin.*",
+    "heif_plugin_registry.*",
+    "nclx.*",
+  })
+
+end
+
+function dav1d_files()
+  files_in_dir("ext/dav1d/src", {
+    "lib.c",
+    "thread_task.c",
+    "cdf.c",
+    "cpu.c",
+    "data.c",
+    "decode.c",
+    "dequant_tables.c",
+    "getbits.c",
+    "intra_edge.c",
+    "itx_1d.c",
+    "lf_mask.c",
+    "log.c",
+    "mem.c",
+    "msac.c",
+    "obu.c",
+    "picture.c",
+    "qm.c",
+    "ref.c",
+    "refmvs.c",
+    "scan.c",
+    "tables.c",
+    "warpmv.c",
+    "wedge.c",
+    "win32/thread.c",
+
+    "sumatra_bitdepth_8.c",
+    "sumatra_bitdepth_8_2.c",
+    "sumatra_bitdepth_16.c",
+    "sumatra_bitdepth_16_2.c",
+  })
+  files_in_dir("ext/dav1d/src/x86", {
+    "cpu.c",
+    "msac_init.c",
+    "refmvs_init.c",
+  })
+
+  files_in_dir("ext/dav1d/src/x86", {
+    "cpuid.asm",
+    "msac.asm",
+    "refmvs.asm",
+    "cdef_avx2.asm",
+    "itx_avx2.asm",
+    "looprestoration_avx2.asm",
+    "cdef_sse.asm",
+    "itx_sse.asm",
+    "cdef_avx512.asm",
+    "filmgrain_avx512.asm",
+    "ipred_avx512.asm",
+    "itx_avx512.asm",
+    "loopfilter_avx512.asm",
+    "looprestoration_avx512.asm",
+    "mc_avx512.asm",
+    "filmgrain_avx2.asm",
+    "ipred_avx2.asm",
+    "loopfilter_avx2.asm",
+    "mc_avx2.asm",
+    "filmgrain_sse.asm",
+    "ipred_sse.asm",
+    "loopfilter_sse.asm",
+    "looprestoration_sse.asm",
+    "mc_sse.asm",
+    "cdef16_avx512.asm",
+    "filmgrain16_avx512.asm",
+    "ipred16_avx512.asm",
+    "looprestoration16_avx512.asm",
+    "mc16_avx512.asm",
+    "cdef16_avx2.asm",
+    "filmgrain16_avx2.asm",
+    "ipred16_avx2.asm",
+    "itx16_avx2.asm",
+    "loopfilter16_avx2.asm",
+    "looprestoration16_avx2.asm",
+    "mc16_avx2.asm",
+    "cdef16_sse.asm",
+    "filmgrain16_sse.asm",
+    "ipred16_sse.asm",
+    "itx16_sse.asm",
+    "loopfilter16_sse.asm",
+    "looprestoration16_sse.asm",
+    "mc16_sse.asm",
+  })
+  files("ext/dav1d/include/common/*.h")
+  files("ext/dav1d/include/dav1d/*.h")
 end
 
 function openjpeg_files()
@@ -480,19 +586,18 @@ function sumatrapdf_files()
     "Accelerators.*",
     "Actions.*",
     "AppColors.*",
-    "AppPrefs.*",
+    "AppSettings.*",
     "AppTools.*",
-    "AppUtil.*",
     "Caption.*",
     "Canvas.*",
     "CanvasAboutUI.*",
     "ChmModel.*",
     "Commands.*",
     "CommandPalette.*",
-    "Controller.h",
     "CrashHandler.*",
     "DisplayModel.*",
     "DisplayMode.*",
+    "DocController.h",
     "EditAnnotations.*",
     "ExternalViewers.*",
     "Favorites.*",
@@ -501,6 +606,9 @@ function sumatrapdf_files()
     "Flags.*",
     "FzImgReader.*",
     "GlobalPrefs.*",
+    "Installer.*",
+    "InstallerCommon.cpp",
+    "MainWindow.*",
     "MemLeakDetect.*",
     "Menu.*",
     "Notifications.*",
@@ -508,9 +616,11 @@ function sumatrapdf_files()
     "Print.*",
     "ProgressUpdateUI.*",
     "RenderCache.*",
+    "RegistryInstaller.*",
+    "RegistryPreview.*",
+    "RegistrySearchFilter.*",
     "resource.h",
     "SaveAsPdf.*",
-    "Scratch.*",
     "SearchAndDDE.*",
     "Selection.*",
     "SettingsStructs.*",
@@ -524,7 +634,6 @@ function sumatrapdf_files()
     "SumatraProperties.*",
     "StressTesting.*",
     "SvgIcons.*",
-    "TabInfo.*",
     "TableOfContents.*",
     "Tabs.*",
     "Tester.*",
@@ -533,18 +642,19 @@ function sumatrapdf_files()
     "Theme.*",
     "Toolbar.*",
     "Translations.*",
-    "TranslationsInfo.cpp",
+    "TranslationLangs.cpp",
     "UpdateCheck.*",
     "Version.h",
-    "WindowInfo.*",
+    "Uninstaller.cpp",
+    "WindowTab.*",
 
     "ext/versions.txt",
-    "docs/*.txt",
   })
   filter {"configurations:Debug"}
     files_in_dir("src", {
       "Tests.cpp",
       "regress/Regress.*",  
+      "Scratch.*",
     })
     files_in_dir("src/testcode", {
       "test-app.h",
@@ -574,6 +684,7 @@ end
 
 function utils_files()
   files_in_dir("src/utils", {
+    "AvifReader.*",
     "ApiHook.*",
     "Archive.*",
     "BaseUtil.*",
@@ -609,13 +720,10 @@ function utils_files()
     "RegistryPaths.*",
     "Scoped.h",
     "ScopedWin.h",
-    "SerializeTxt.*",
     "SettingsUtil.*",
     "SquareTreeParser.*",
     "StrconvUtil.*",
     "StrFormat.*",
-    "StringViewUtil.*",
-    "StrSlice.*",
     "StrUtil.*",
     "TempAllocator.*",
     "ThreadUtil.*",
@@ -626,11 +734,16 @@ function utils_files()
     "Vec.h",
     "VecSegmented.h",
     "WebpReader.*",
+    "AvifReader.*",
     "WinDynCalls.*",
     "WinUtil.*",
-    "windrawlib.*",
     "ZipUtil.*",
   })
+  filter {"configurations:Debug"}
+    files_in_dir("src/utils", {
+      "windrawlib.*",
+    })
+  filter {}
 end
 
 function wingui_files()
@@ -1002,7 +1115,6 @@ function test_util_files()
     "Log.*",
     "StrconvUtil.*",
     "StrFormat.*",
-    "StringViewUtil.*",
     "StrUtil.*",
     "SquareTreeParser.*",
     "TrivialHtmlParser.*",
@@ -1014,9 +1126,8 @@ function test_util_files()
     "tests/*"
   })
   files_in_dir("src", {
-    --"AppTools.*",
     --"StressTesting.*",
-    "AppUtil.*",
+    --"AppTools.*",
     "DisplayMode.*",
     "Flags.*",
     "SumatraConfig.*",
@@ -1059,6 +1170,7 @@ function pdf_preview_files()
     "EngineAll.h",
     "FzImgReader.*",
     "HtmlFormatter.*",
+    "RegistryPreview.*",
     "MobiDoc.*",
     "MUPDF_Exports.cpp",
     "PalmDbReader.*",
@@ -1067,10 +1179,10 @@ function pdf_preview_files()
   })
 end
 
-function pdf_filter_files()
+function search_filter_files()
   files_in_dir("src/ifilter", {
     "PdfFilter.*",
-    "PdfFilterDll.cpp",
+    "SearchFilterDll.cpp",
     "CPdfFilter.*",
     "FilterBase.h",
   })
@@ -1082,6 +1194,7 @@ function pdf_filter_files()
     "EngineMupdf.*",
     "EngineMupdfImpl.*",
     "PalmDbReader.*",
+    "RegistrySearchFilter.*",
     "MobiDoc.*",
     "EbookDoc.*",
   })

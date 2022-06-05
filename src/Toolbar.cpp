@@ -21,7 +21,7 @@
 #include "TextSearch.h"
 #include "SumatraPDF.h"
 #include "MainWindow.h"
-#include "TabInfo.h"
+#include "WindowTab.h"
 #include "resource.h"
 #include "Commands.h"
 #include "AppTools.h"
@@ -477,7 +477,7 @@ void UpdateToolbarState(MainWindow* win) {
 
     isChecked |= (state & TBSTATE_CHECKED);
     if (!isChecked) {
-        win->currentTab->prevZoomVirtual = kInvalidZoom;
+        win->CurrentTab()->prevZoomVirtual = kInvalidZoom;
     }
 }
 

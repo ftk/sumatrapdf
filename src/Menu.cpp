@@ -28,7 +28,7 @@
 #include "SumatraConfig.h"
 #include "SumatraPDF.h"
 #include "MainWindow.h"
-#include "TabInfo.h"
+#include "WindowTab.h"
 #include "resource.h"
 #include "Commands.h"
 #include "ExternalViewers.h"
@@ -45,10 +45,10 @@
 #include "utils/Log.h"
 
 // SumatraPDF.cpp
-extern Vec<Annotation*> MakeAnnotationFromSelection(TabInfo* tab, AnnotationType annotType);
+extern Vec<Annotation*> MakeAnnotationFromSelection(WindowTab* tab, AnnotationType annotType);
 
 struct BuildMenuCtx {
-    TabInfo* tab = nullptr;
+    WindowTab* tab = nullptr;
     bool isCbx = false;
     bool hasSelection = false;
     bool supportsAnnotations = false;
@@ -1077,7 +1077,7 @@ static void AppendRecentFilesToMenu(HMENU m) {
     }
 }
 
-void FillBuildMenuCtx(TabInfo* tab, BuildMenuCtx* ctx, Point pt) {
+void FillBuildMenuCtx(WindowTab* tab, BuildMenuCtx* ctx, Point pt) {
     if (!tab) {
         return;
     }
@@ -1184,7 +1184,7 @@ static void DynamicPartOfFileMenu(HMENU menu, BuildMenuCtx* ctx) {
     // e-mail client, Adobe Reader, Foxit, PDF-XChange
     // Don't hide items here that won't always be hidden
     // (MenuUpdateStateForWindow() is for that)
-    TabInfo* tab = ctx->tab;
+    WindowTab* tab = ctx->tab;
     for (int cmd = CmdOpenWithFirst + 1; cmd < CmdOpenWithLast; cmd++) {
         if (!CanViewWithKnownExternalViewer(tab, cmd)) {
             MenuRemove(menu, cmd);
@@ -1229,7 +1229,7 @@ again3:
     }
 }
 
-static void RebuildFileMenu(TabInfo* tab, HMENU menu) {
+static void RebuildFileMenu(WindowTab* tab, HMENU menu) {
     MenuEmpty(menu);
     BuildMenuCtx buildCtx;
     FillBuildMenuCtx(tab, &buildCtx, Point{0, 0});
@@ -1344,7 +1344,7 @@ HMENU BuildMenuFromMenuDef(MenuDef* menuDef, HMENU menu, BuildMenuCtx* ctx) {
         }
 
         if (cmdId == CmdOpenWithHtmlHelp && ctx) {
-            TabInfo* tab = ctx->tab;
+            WindowTab* tab = ctx->tab;
             char* path = tab ? tab->filePath : nullptr;
             AppendExternalViewersToMenu(menu, path);
         }
@@ -1461,7 +1461,7 @@ static bool IsFileCloseMenuEnabled() {
     return false;
 }
 
-static void SetMenuStateForSelection(TabInfo* tab, HMENU menu) {
+static void SetMenuStateForSelection(WindowTab* tab, HMENU menu) {
     bool isTextSelected = tab && tab->win && tab->win->showSelection && tab->selectionOnPage;
     for (int id : disableIfNoSelection) {
         MenuSetEnabled(menu, id, isTextSelected);
@@ -1496,14 +1496,14 @@ void MenuUpdateDisplayMode(MainWindow* win) {
     CheckMenuRadioItem(win->menu, CmdViewLayoutFirst, CmdViewLayoutLast, id, MF_BYCOMMAND);
     MenuSetChecked(win->menu, CmdToggleContinuousView, IsContinuous(displayMode));
 
-    if (win->currentTab && win->currentTab->GetEngineType() == kindEngineComicBooks) {
+    if (win->CurrentTab() && win->CurrentTab()->GetEngineType() == kindEngineComicBooks) {
         bool mangaMode = win->AsFixed()->GetDisplayR2L();
         MenuSetChecked(win->menu, CmdToggleMangaMode, mangaMode);
     }
 }
 
 static void MenuUpdateStateForWindow(MainWindow* win) {
-    TabInfo* tab = win->currentTab;
+    WindowTab* tab = win->CurrentTab();
 
     bool hasDocument = tab && tab->IsDocLoaded();
     for (int id : disableIfNoDocument) {
@@ -1627,7 +1627,7 @@ void OnWindowContextMenu(MainWindow* win, int x, int y) {
     }
 
     Point cursorPos{x, y};
-    TabInfo* tab = win->currentTab;
+    WindowTab* tab = win->CurrentTab();
     IPageElement* pageEl = dm->GetElementAtPos(cursorPos, nullptr);
 
     char* value = nullptr;
@@ -2098,7 +2098,7 @@ void MenuOwnerDrawnDrawItem(__unused HWND hwnd, DRAWITEMSTRUCT* dis) {
 }
 
 HMENU BuildMenu(MainWindow* win) {
-    TabInfo* tab = win->currentTab;
+    WindowTab* tab = win->CurrentTab();
 
     BuildMenuCtx buildCtx;
     FillBuildMenuCtx(tab, &buildCtx, Point{0, 0});
@@ -2128,7 +2128,7 @@ void UpdateAppMenu(MainWindow* win, HMENU m) {
     }
     UINT_PTR id = (UINT_PTR)GetMenuItemID(m, 0);
     if (id == menuDefFile[0].idOrSubmenu) {
-        RebuildFileMenu(win->currentTab, m);
+        RebuildFileMenu(win->CurrentTab(), m);
     } else if (id == menuDefFavorites[0].idOrSubmenu) {
         MenuEmpty(m);
         BuildMenuFromMenuDef(menuDefFavorites, m, nullptr);

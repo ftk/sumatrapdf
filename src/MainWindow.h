@@ -20,7 +20,7 @@ struct DocController;
 struct DocControllerCallback;
 struct ChmModel;
 struct DisplayModel;
-struct TabInfo;
+struct WindowTab;
 
 struct Annotation;
 struct ILinkHandler;
@@ -83,11 +83,14 @@ struct MainWindow {
     DisplayModel* AsFixed() const;
     ChmModel* AsChm() const;
 
-    // TODO: use currentTab->ctrl instead
-    DocController* ctrl = nullptr; // owned by currentTab
+    // TODO: use CurrentTab()->ctrl instead
+    DocController* ctrl = nullptr; // owned by CurrentTab()
 
-    Vec<TabInfo*> tabs;
-    TabInfo* currentTab = nullptr; // points into tabs
+    Vec<WindowTab*> tabs;
+    WindowTab* currentTabTemp = nullptr; // points into tabs
+    WindowTab* CurrentTab() const {
+        return currentTabTemp;
+    }
 
     HWND hwndFrame = nullptr;
     HWND hwndCanvas = nullptr;
@@ -133,7 +136,7 @@ struct MainWindow {
     bool tabsInTitlebar = false;
     // keeps the sequence of tab selection. This is needed for restoration
     // of the previous tab when the current one is closed. (Points into tabs.)
-    Vec<TabInfo*>* tabSelectionHistory = nullptr;
+    Vec<WindowTab*>* tabSelectionHistory = nullptr;
 
     HWND hwndCaption = nullptr;
     CaptionInfo* caption = nullptr;
@@ -163,7 +166,7 @@ struct MainWindow {
     int xScrollSpeed = 0;
     int yScrollSpeed = 0;
 
-    // true while selecting and when currentTab->selectionOnPage != nullptr
+    // true while selecting and when CurrentTab()->selectionOnPage != nullptr
     bool showSelection = false;
     // selection rectangle in screen coordinates (only needed while selecting)
     Rect selectionRect;
@@ -249,7 +252,7 @@ void ClearFindBox(MainWindow*);
 void CreateMovePatternLazy(MainWindow*);
 void ClearMouseState(MainWindow*);
 bool IsRightDragging(MainWindow*);
-MainWindow* FindMainWindowByTabInfo(TabInfo*);
+MainWindow* FindMainWindowByWindowTab(WindowTab*);
 MainWindow* FindMainWindowByHwnd(HWND);
 bool MainWindowStillValid(MainWindow*);
 MainWindow* FindMainWindowByController(DocController*);
