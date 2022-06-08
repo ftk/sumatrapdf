@@ -53,15 +53,18 @@ Kind kindEngineComicBooks = "engineComicBooks";
 
 ///// EngineImages methods apply to all types of engines handling full-page images /////
 
+class EngineImages;
 struct ImagePage {
     int pageNo = 0;
     Bitmap* bmp = nullptr;
+    EngineImages* engine = nullptr;
     bool ownBmp = true;
     int refs = 1;
 
-    ImagePage(int pageNo, Bitmap* bmp) {
+    ImagePage(EngineImages* engine, int pageNo, Bitmap* bmp) {
         this->pageNo = pageNo;
         this->bmp = bmp;
+        this->engine = engine;
     }
 };
 
@@ -69,6 +72,14 @@ struct ImagePageInfo {
     Vec<IPageElement*> allElements;
     RectF mediabox;
 };
+
+static CRITICAL_SECTION cacheAccess;
+static Vec<ImagePage*> pageCache;
+
+static struct cacheAccessInit {
+    cacheAccessInit() { InitializeCriticalSection(&cacheAccess); }
+    ~cacheAccessInit() { DeleteCriticalSection(&cacheAccess); }
+} init_;
 
 class EngineImages : public EngineBase {
   public:
@@ -105,8 +116,6 @@ class EngineImages : public EngineBase {
 
     ScopedComPtr<IStream> fileStream;
 
-    CRITICAL_SECTION cacheAccess;
-    Vec<ImagePage*> pageCache;
     Vec<ImagePageInfo*> pages;
 
     void GetTransform(Matrix& m, int pageNo, float zoom, int rotation);
@@ -127,19 +136,19 @@ EngineImages::EngineImages() {
     preferredLayout.nonContinuous = true;
     isImageCollection = true;
 
-    InitializeCriticalSection(&cacheAccess);
 }
 
 EngineImages::~EngineImages() {
     EnterCriticalSection(&cacheAccess);
-    while (pageCache.size() > 0) {
-        ImagePage* lastPage = pageCache.Last();
+    for (int i = pageCache.size() - 1; i >= 0; i--) {
+        ImagePage* lastPage = pageCache.at(i);
+        if (lastPage->engine != this)
+            continue;
         CrashIf(lastPage->refs != 1);
         DropPage(lastPage, true);
     }
     DeleteVecMembers(pages);
     LeaveCriticalSection(&cacheAccess);
-    DeleteCriticalSection(&cacheAccess);
 }
 
 RectF EngineImages::PageMediabox(int pageNo) {
@@ -328,7 +337,7 @@ ImagePage* EngineImages::GetPage(int pageNo, bool tryOnly) {
     ImagePage* result = nullptr;
 
     for (size_t i = 0; i < pageCache.size(); i++) {
-        if (pageCache.at(i)->pageNo == pageNo) {
+        if (pageCache.at(i)->engine == this && pageCache.at(i)->pageNo == pageNo) {
             result = pageCache.at(i);
             break;
         }
@@ -343,7 +352,7 @@ ImagePage* EngineImages::GetPage(int pageNo, bool tryOnly) {
             CrashIf(pageCache.size() != MAX_IMAGE_PAGE_CACHE);
             DropPage(pageCache.Last(), true);
         }
-        result = new ImagePage(pageNo, nullptr);
+        result = new ImagePage(this, pageNo, nullptr);
         result->bmp = LoadBitmapForPage(pageNo, result->ownBmp);
         pageCache.InsertAt(0, result);
     } else if (result != pageCache.at(0)) {
