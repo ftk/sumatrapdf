@@ -2129,7 +2129,6 @@ static void CloseDocumentInCurrentTab(MainWindow* win, bool keepUIEnabled, bool 
     WindowTab* currentTab = win->CurrentTab();
     if (deleteModel) {
         delete currentTab->ctrl;
-        delete currentTab->ctrl;
         currentTab->ctrl = nullptr;
         FileWatcherUnsubscribe(win->CurrentTab()->watcher);
         win->CurrentTab()->watcher = nullptr;
