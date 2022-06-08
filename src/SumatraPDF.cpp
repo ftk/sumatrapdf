@@ -105,7 +105,7 @@ bool gDebugShowLinks = false;
 bool gShowFrameRate = false;
 
 // if true, Enable lazyload session tabs on startup
-bool gEnableLazyLoad = false;
+bool gEnableLazyLoad = true;
 
 // in plugin mode, the window's frame isn't drawn and closing and
 // fullscreen are disabled, so that SumatraPDF can be displayed
