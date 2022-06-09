@@ -49,7 +49,7 @@ Kind kindEngineImageDir = "engineImageDir";
 Kind kindEngineComicBooks = "engineComicBooks";
 
 // number of decoded bitmaps to cache for quicker rendering
-#define MAX_IMAGE_PAGE_CACHE 4
+#define MAX_IMAGE_PAGE_CACHE 6
 
 ///// EngineImages methods apply to all types of engines handling full-page images /////
 
