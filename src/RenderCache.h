@@ -6,7 +6,7 @@ constexpr int RENDER_DELAY_UNDEFINED = std::numeric_limits<int>::max() - 2;
 
 #define INVALID_TILE_RES ((USHORT)-1)
 
-#define MAX_PAGE_REQUESTS 10
+#define MAX_PAGE_REQUESTS 8
 // keep this value reasonably low, else we'll run out of
 // GDI resources/memory when caching many larger bitmaps
 // TODO: this should be based on amount of memory taken by rendered pages

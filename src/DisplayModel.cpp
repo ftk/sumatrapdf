@@ -66,7 +66,7 @@
 #include "SumatraPDF.h"
 
 // if true, we pre-render the pages right before and after the visible pages
-static const bool gPredictiveRender = true;
+static bool gPredictiveRender = true;
 
 static int ColumnsFromDisplayMode(DisplayMode displayMode) {
     if (!IsSingle(displayMode)) {
@@ -430,7 +430,7 @@ bool DisplayModel::PageVisibleNearby(int pageNo) const {
     int columns = ColumnsFromDisplayMode(mode);
 
     pageNo = FirstPageInARowNo(pageNo, columns, IsBookView(mode));
-    for (int i = pageNo - 2 * columns; i < pageNo + 3 * columns; i++) {
+    for (int i = pageNo - columns; i < pageNo + 2 * columns; i++) {
         if (ValidPageNo(i) && PageVisible(i)) {
             return true;
         }
@@ -1126,9 +1126,6 @@ void DisplayModel::RenderVisibleParts() {
             cb->RequestRendering(firstVisiblePage - 1);
         }
         if (lastVisiblePage < PageCount()) {
-            if (lastVisiblePage + 1 < PageCount() && IsSingle(GetDisplayMode())) {
-                cb->RequestRendering(lastVisiblePage + 2);
-            }
             cb->RequestRendering(lastVisiblePage + 1);
         }
     }
