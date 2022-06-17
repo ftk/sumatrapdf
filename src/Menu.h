@@ -3,10 +3,13 @@
 
 struct BuildMenuCtx;
 struct MenuOwnerDrawInfo;
-struct MenuDef;
 
-extern MenuDef menuDefContextToc[];
-extern MenuDef menuDefContextFav[];
+struct MenuDef {
+    const char* title = nullptr;
+    UINT_PTR idOrSubmenu = 0;
+};
+
+constexpr const char* kMenuSeparator = "-----";
 
 extern bool gShowDebugMenu;
 extern bool gAddCrashMeMenu;

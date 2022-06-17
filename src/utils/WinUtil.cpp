@@ -50,32 +50,6 @@ Size RenderedBitmap::Size() const {
     return size;
 }
 
-int RectDx(const RECT& r) {
-    return r.right - r.left;
-}
-int RectDy(const RECT& r) {
-    return r.bottom - r.top;
-}
-
-POINT MakePoint(long x, long y) {
-    POINT p = {x, y};
-    return p;
-}
-
-SIZE MakeSize(long dx, long dy) {
-    SIZE sz = {dx, dy};
-    return sz;
-}
-
-RECT MakeRect(long x, long y, long dx, long dy) {
-    RECT r;
-    r.left = x;
-    r.right = x + dx;
-    r.top = y;
-    r.bottom = y + dy;
-    return r;
-}
-
 void EditSelectAll(HWND hwnd) {
     Edit_SetSel(hwnd, 0, -1);
 }
@@ -143,7 +117,7 @@ Rect WindowRect(HWND hwnd) {
 Rect MapRectToWindow(Rect rect, HWND hwndFrom, HWND hwndTo) {
     RECT rc = ToRECT(rect);
     MapWindowPoints(hwndFrom, hwndTo, (LPPOINT)&rc, 2);
-    return Rect::FromRECT(rc);
+    return ToRect(rc);
 }
 
 int MapWindowPoints(HWND hwndFrom, HWND hwndTo, Point* points, int nPoints) {
@@ -159,6 +133,13 @@ int MapWindowPoints(HWND hwndFrom, HWND hwndTo, Point* points, int nPoints) {
         points[i].y = pnts[i].y;
     }
     return res;
+}
+
+void HwndScreenToClient(HWND hwnd, Point& p) {
+    POINT pt = {p.x, p.y};
+    ScreenToClient(hwnd, &pt);
+    p.x = pt.x;
+    p.y = pt.y;
 }
 
 void MoveWindow(HWND hwnd, Rect rect) {
@@ -1089,7 +1070,7 @@ Rect GetWorkAreaRect(Rect rect, HWND hwnd) {
     if (!ok) {
         SystemParametersInfo(SPI_GETWORKAREA, 0, &mi.rcWork, 0);
     }
-    return Rect::FromRECT(mi.rcWork);
+    return ToRect(mi.rcWork);
 }
 
 // returns the dimensions the given window has to have in order to be a fullscreen window
@@ -1097,7 +1078,7 @@ Rect GetFullscreenRect(HWND hwnd) {
     MONITORINFO mi{};
     mi.cbSize = sizeof(mi);
     if (GetMonitorInfo(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &mi)) {
-        return Rect::FromRECT(mi.rcMonitor);
+        return ToRect(mi.rcMonitor);
     }
     // fall back to the primary monitor
     return Rect(0, 0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN));
@@ -1105,7 +1086,7 @@ Rect GetFullscreenRect(HWND hwnd) {
 
 static BOOL CALLBACK GetMonitorRectProc(__unused HMONITOR hMonitor, __unused HDC hdc, LPRECT rcMonitor, LPARAM data) {
     Rect* rcAll = (Rect*)data;
-    *rcAll = rcAll->Union(Rect::FromRECT(*rcMonitor));
+    *rcAll = rcAll->Union(ToRect(*rcMonitor));
     return TRUE;
 }
 
@@ -1116,7 +1097,7 @@ Rect GetVirtualScreenRect() {
     return result;
 }
 
-void PaintRect(HDC hdc, const Rect rect) {
+void DrawRect(HDC hdc, const Rect rect) {
     MoveToEx(hdc, rect.x, rect.y, nullptr);
     LineTo(hdc, rect.x + rect.dx - 1, rect.y);
     LineTo(hdc, rect.x + rect.dx - 1, rect.y + rect.dy - 1);
@@ -1124,7 +1105,7 @@ void PaintRect(HDC hdc, const Rect rect) {
     LineTo(hdc, rect.x, rect.y);
 }
 
-void PaintLine(HDC hdc, const Rect rect) {
+void DrawLine(HDC hdc, const Rect rect) {
     MoveToEx(hdc, rect.x, rect.y, nullptr);
     LineTo(hdc, rect.x + rect.dx, rect.y + rect.dy);
 }
@@ -1171,7 +1152,7 @@ void CenterDialog(HWND hDlg, HWND hParent) {
     rcDialog.Offset(rcOwner.x + (rcRect.x - rcDialog.x + rcRect.dx - rcDialog.dx) / 2,
                     rcOwner.y + (rcRect.y - rcDialog.y + rcRect.dy - rcDialog.dy) / 2);
     // ensure that the dialog is fully visible on one monitor
-    rcDialog = ShiftRectToWorkArea(rcDialog, hDlg, true);
+    rcDialog = ShiftRectToWorkArea(rcDialog, hParent, true);
 
     SetWindowPos(hDlg, nullptr, rcDialog.x, rcDialog.y, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
 }
@@ -2419,10 +2400,6 @@ bool TrackMouseLeave(HWND hwnd) {
     return true;
 }
 
-void TriggerRepaint(HWND hwnd) {
-    InvalidateRect(hwnd, nullptr, FALSE);
-}
-
 // cf. http://blogs.msdn.com/b/oldnewthing/archive/2004/10/25/247180.aspx
 EXTERN_C IMAGE_DOS_HEADER __ImageBase;
 
@@ -2559,7 +2536,7 @@ void HwndPositionToTheRightOf(HWND hwnd, HWND hwndRelative) {
     if (dyDiff > 0) {
         rHwnd.y += dyDiff / 2;
     }
-    Rect r = ShiftRectToWorkArea(rHwnd, hwnd, true);
+    Rect r = ShiftRectToWorkArea(rHwnd, hwndRelative, true);
     SetWindowPos(hwnd, nullptr, r.x, r.y, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
 }
 
@@ -2569,8 +2546,9 @@ void HwndPositionInCenterOf(HWND hwnd, HWND hwndRelative) {
     int x = rRelative.x + (rRelative.dx / 2) - (r.dx / 2);
     int y = rRelative.y + (rRelative.dy / 2) - (r.dy / 2);
 
-    Rect rc = ShiftRectToWorkArea(Rect{x, y, r.dx, r.dy}, hwnd, true);
-    SetWindowPos(hwnd, nullptr, rc.x, rc.y, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
+    Rect r2 = {x, y, r.dx, r.dy};
+    r = ShiftRectToWorkArea(r2, hwndRelative, true);
+    SetWindowPos(hwnd, nullptr, r.x, r.y, 0, 0, SWP_NOZORDER | SWP_NOSIZE);
 }
 
 void HwndSendCommand(HWND hwnd, int cmdId) {
@@ -2722,7 +2700,7 @@ void DrawCenteredText(HDC hdc, const Rect r, const WCHAR* txt, bool isRTL) {
 }
 
 void DrawCenteredText(HDC hdc, const RECT& r, const WCHAR* txt, bool isRTL) {
-    Rect rc = Rect::FromRECT(r);
+    Rect rc = ToRect(r);
     DrawCenteredText(hdc, rc, txt, isRTL);
 }
 

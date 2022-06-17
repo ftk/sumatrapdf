@@ -313,11 +313,11 @@ RenderedBitmap* EngineImages::GetImageForPageElement(IPageElement* pel) {
 }
 
 ByteSlice EngineImages::GetFileData() {
-    return GetStreamOrFileData(fileStream.Get(), FileName());
+    return GetStreamOrFileData(fileStream.Get(), FilePath());
 }
 
 bool EngineImages::SaveFileAs(const char* dstPath) {
-    const char* srcPath = FileName();
+    const char* srcPath = FilePath();
     if (srcPath) {
         bool ok = file::Copy(dstPath, srcPath, false);
         if (ok) {
@@ -542,7 +542,7 @@ EngineBase* EngineImage::Clone() {
     }
 
     EngineImage* clone = new EngineImage();
-    clone->SetFileName(FileName());
+    clone->SetFilePath(FilePath());
     clone->defaultExt = str::Dup(defaultExt);
     clone->imageFormat = imageFormat;
     clone->fileDPI = fileDPI;
@@ -559,7 +559,7 @@ bool EngineImage::LoadSingleFile(const char* path) {
     if (!path) {
         return false;
     }
-    SetFileName(path);
+    SetFilePath(path);
 
     ByteSlice data = file::ReadFile(path);
     imageFormat = GuessFileTypeFromContent(data);
@@ -623,7 +623,7 @@ static void ReportIfNotMultiImage(EngineImage* e) {
     if (IsMultiImage(fmt)) {
         return;
     }
-    logfa("EngineImage::LoadBitmapForPage: trying for non-multi image, %s, path: '%s'\n", fmt, e->FileName());
+    logfa("EngineImage::LoadBitmapForPage: trying for non-multi image, %s, path: '%s'\n", fmt, e->FilePath());
     ReportIf(true);
 }
 
@@ -653,7 +653,6 @@ bool EngineImage::FinishLoading() {
     return pageCount > 0;
 }
 
-// http://www.universalthread.com/ViewPageArticle.aspx?ID=831
 #ifndef PropertyTagXPTitle
 #define PropertyTagXPTitle 0x9c9b
 #define PropertyTagXPComment 0x9c9c
@@ -756,8 +755,8 @@ bool EngineImage::SaveFileAsPDF(const char* pdfFileName) {
     bool ok = true;
     PdfCreator* c = new PdfCreator();
     auto dpi = GetFileDPI();
-    if (FileName()) {
-        ByteSlice data = file::ReadFile(FileName());
+    if (FilePath()) {
+        ByteSlice data = file::ReadFile(FilePath());
         ok = c->AddPageFromImageData(data, dpi);
         data.Free();
     } else {
@@ -841,7 +840,7 @@ class EngineImageDir : public EngineImages {
     }
 
     EngineBase* Clone() override {
-        const char* path = FilePathTemp();
+        const char* path = FilePath();
         if (path) {
             return CreateFromFile(path);
         }
@@ -876,7 +875,7 @@ class EngineImageDir : public EngineImages {
 };
 
 static bool LoadImageDir(EngineImageDir* e, const char* dir) {
-    e->SetFileName(dir);
+    e->SetFilePath(dir);
 
     DirTraverse(dir, false, [e](const char* path) -> bool {
         Kind kind = GuessFileTypeFromName(path);
@@ -1114,7 +1113,7 @@ EngineBase* EngineCbx::Clone() {
             return CreateFromStream(stm);
         }
     }
-    const char* path = FilePathTemp();
+    const char* path = FilePath();
     if (path) {
         return CreateFromFile(path);
     }
@@ -1125,7 +1124,7 @@ bool EngineCbx::LoadFromFile(const char* file) {
     if (!file) {
         return false;
     }
-    SetFileName(file);
+    SetFilePath(file);
     return FinishLoading();
 }
 

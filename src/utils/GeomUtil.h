@@ -86,7 +86,6 @@ struct Rect {
     Point TL() const;
     Point BR() const;
     Size Size() const;
-    static Rect FromRECT(const RECT& rect);
     bool Equals(const Rect& other) const;
     bool operator==(const Rect& other) const;
     bool operator!=(const Rect& other) const;
@@ -121,28 +120,34 @@ struct RectF {
     PointF TL() const;
     PointF BR() const;
     SizeF Size() const;
-    static RectF FromRECT(const RECT& rect);
     bool operator==(const RectF& other) const;
     bool operator!=(const RectF& other) const;
 };
+
+int RectDx(const RECT& r);
+int RectDy(const RECT& r);
 
 PointF ToPointFl(Point p);
 Gdiplus::Point ToGdipPoint(Point p);
 Point ToPoint(PointF p);
 Gdiplus::PointF ToGdipPointF(PointF p);
+POINT ToPOINT(const Point& p);
 
 SIZE ToSIZE(Size s);
 SizeF ToSizeFl(Size s);
 Size ToSize(SizeF s);
 
 RectF ToRectF(Rect r);
+
 RECT ToRECT(Rect r);
-RECT RECTFromRect(Gdiplus::Rect r);
+RECT ToRECT(RectF r);
+
+Rect ToRect(RectF r);
+Rect ToRect(const RECT& r);
+
 Gdiplus::Rect ToGdipRect(Rect r);
 Gdiplus::RectF ToGdipRectF(Rect r);
 
-RECT ToRECT(RectF r);
-Rect ToRect(RectF r);
 Gdiplus::Rect ToGdipRect(RectF r);
 Gdiplus::RectF ToGdipRectF(RectF r);
 

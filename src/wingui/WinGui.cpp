@@ -13,9 +13,9 @@
 #include "wingui/Layout.h"
 #include "wingui/WinGui.h"
 
-#include "utils/Log.h"
-
 #include "webview2.h"
+
+#include "utils/Log.h"
 
 Kind kindWnd = "wnd";
 
@@ -24,6 +24,151 @@ static LONG gSubclassId = 0;
 UINT_PTR NextSubclassId() {
     LONG res = InterlockedIncrement(&gSubclassId);
     return (UINT_PTR)res;
+}
+
+#define WIN_MESSAGES(V)          \
+    V(WM_CREATE)                 \
+    V(WM_DESTROY)                \
+    V(WM_MOVE)                   \
+    V(WM_SIZE)                   \
+    V(WM_ACTIVATE)               \
+    V(WM_SETFOCUS)               \
+    V(WM_KILLFOCUS)              \
+    V(WM_ENABLE)                 \
+    V(WM_SETREDRAW)              \
+    V(WM_SETTEXT)                \
+    V(WM_GETTEXT)                \
+    V(WM_GETTEXTLENGTH)          \
+    V(WM_PAINT)                  \
+    V(WM_CLOSE)                  \
+    V(WM_QUERYENDSESSION)        \
+    V(WM_QUERYOPEN)              \
+    V(WM_ENDSESSION)             \
+    V(WM_QUIT)                   \
+    V(WM_ERASEBKGND)             \
+    V(WM_SYSCOLORCHANGE)         \
+    V(WM_SHOWWINDOW)             \
+    V(WM_WININICHANGE)           \
+    V(WM_SETTINGCHANGE)          \
+    V(WM_DEVMODECHANGE)          \
+    V(WM_ACTIVATEAPP)            \
+    V(WM_FONTCHANGE)             \
+    V(WM_TIMECHANGE)             \
+    V(WM_CANCELMODE)             \
+    V(WM_SETCURSOR)              \
+    V(WM_MOUSEACTIVATE)          \
+    V(WM_CHILDACTIVATE)          \
+    V(WM_QUEUESYNC)              \
+    V(WM_GETMINMAXINFO)          \
+    V(WM_PAINTICON)              \
+    V(WM_ICONERASEBKGND)         \
+    V(WM_NEXTDLGCTL)             \
+    V(WM_SPOOLERSTATUS)          \
+    V(WM_DRAWITEM)               \
+    V(WM_MEASUREITEM)            \
+    V(WM_DELETEITEM)             \
+    V(WM_VKEYTOITEM)             \
+    V(WM_CHARTOITEM)             \
+    V(WM_SETFONT)                \
+    V(WM_GETFONT)                \
+    V(WM_SETHOTKEY)              \
+    V(WM_GETHOTKEY)              \
+    V(WM_QUERYDRAGICON)          \
+    V(WM_COMPAREITEM)            \
+    V(WM_GETOBJECT)              \
+    V(WM_COMPACTING)             \
+    V(WM_COMMNOTIFY)             \
+    V(WM_WINDOWPOSCHANGING)      \
+    V(WM_WINDOWPOSCHANGED)       \
+    V(WM_POWER)                  \
+    V(WM_COPYDATA)               \
+    V(WM_CANCELJOURNAL)          \
+    V(WM_NOTIFY)                 \
+    V(WM_INPUTLANGCHANGEREQUEST) \
+    V(WM_INPUTLANGCHANGE)        \
+    V(WM_TCARD)                  \
+    V(WM_HELP)                   \
+    V(WM_USERCHANGED)            \
+    V(WM_NOTIFYFORMAT)           \
+    V(WM_CONTEXTMENU)            \
+    V(WM_STYLECHANGING)          \
+    V(WM_STYLECHANGED)           \
+    V(WM_DISPLAYCHANGE)          \
+    V(WM_GETICON)                \
+    V(WM_SETICON)                \
+    V(WM_NCCREATE)               \
+    V(WM_NCDESTROY)              \
+    V(WM_NCCALCSIZE)             \
+    V(WM_NCHITTEST)              \
+    V(WM_NCPAINT)                \
+    V(WM_NCACTIVATE)             \
+    V(WM_GETDLGCODE)             \
+    V(WM_MOUSEMOVE)              \
+    V(WM_LBUTTONDOWN)            \
+    V(WM_LBUTTONUP)              \
+    V(WM_LBUTTONDBLCLK)          \
+    V(WM_RBUTTONDOWN)            \
+    V(WM_RBUTTONUP)              \
+    V(WM_RBUTTONDBLCLK)          \
+    V(WM_MBUTTONDOWN)            \
+    V(WM_MBUTTONUP)              \
+    V(WM_MBUTTONDBLCLK)          \
+    V(WM_MOUSEWHEEL)             \
+    V(WM_XBUTTONDOWN)            \
+    V(WM_XBUTTONUP)              \
+    V(WM_XBUTTONDBLCLK)          \
+    V(WM_MOUSEHWHEEL)            \
+    V(WM_PARENTNOTIFY)           \
+    V(WM_ENTERMENULOOP)          \
+    V(WM_EXITMENULOOP)           \
+    V(WM_NEXTMENU)               \
+    V(WM_SIZING)                 \
+    V(WM_CAPTURECHANGED)         \
+    V(WM_MOVING)                 \
+    V(TCM_GETITEMCOUNT)          \
+    V(TCM_GETITEMW)              \
+    V(TCM_SETITEMW)              \
+    V(TCM_INSERTITEMW)           \
+    V(TCM_DELETEITEM)            \
+    V(TCM_DELETEALLITEMS)        \
+    V(TCM_GETITEMRECT)           \
+    V(TCM_GETCURSEL)             \
+    V(TCM_SETCURSEL)             \
+    V(TCM_HITTEST)               \
+    V(TCM_SETITEMEXTRA)          \
+    V(TCM_ADJUSTRECT)            \
+    V(TCM_SETITEMSIZE)           \
+    V(TCM_REMOVEIMAGE)           \
+    V(TCM_SETPADDING)            \
+    V(TCM_GETROWCOUNT)           \
+    V(TCM_GETTOOLTIPS)           \
+    V(TCM_SETTOOLTIPS)           \
+    V(TCM_GETCURFOCUS)           \
+    V(TCM_SETCURFOCUS)           \
+    V(TCM_SETMINTABWIDTH)        \
+    V(TCM_DESELECTALL)           \
+    V(TCM_HIGHLIGHTITEM)
+
+#define MSG_ID(id) id,
+UINT gWinMessageIDs[] = {WIN_MESSAGES(MSG_ID)};
+#undef MSG_ID
+
+#define MSG_NAME(id) #id "\0"
+SeqStrings gWinMessageNames = WIN_MESSAGES(MSG_NAME) "\0";
+#undef MSG_NAME
+
+const char* WinMsgName(UINT msg) {
+    int n = dimof(gWinMessageIDs);
+    for (int i = 0; i < n; i++) {
+        UINT m = gWinMessageIDs[i];
+        if (m == msg) {
+            return seqstrings::IdxToStr(gWinMessageNames, i);
+        }
+    }
+    char* s = str::Format("0x%x", (int)msg);
+    char* res = str::DupTemp(s);
+    str::Free(s);
+    return res;
 }
 
 // TODO:
@@ -266,7 +411,7 @@ void Wnd::OnContextMenu(Point ptScreen) {
     ev.w = this;
     ev.mouseScreen = ptScreen;
 
-    POINT ptW{ptScreen.x, ptScreen.y};
+    POINT ptW = ToPOINT(ptScreen);
     if (ptScreen.x != -1) {
         MapWindowPoints(HWND_DESKTOP, hwnd, &ptW, 1);
     }
@@ -2222,6 +2367,16 @@ std::string html_from_uri(const std::string s) {
 
 Kind kindWebView = "webView";
 
+char* GetWebView2VersionTemp() {
+    WCHAR* ver = nullptr;
+    HRESULT hr = GetAvailableCoreWebView2BrowserVersionString(nullptr, &ver);
+    if (FAILED(hr) || (ver == nullptr)) {
+        return nullptr;
+    }
+    char* res = ToUtf8Temp(ver);
+    return res;
+}
+
 class webview2_com_handler : public ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler,
                              public ICoreWebView2CreateCoreWebView2ControllerCompletedHandler,
                              public ICoreWebView2WebMessageReceivedEventHandler,
@@ -2955,7 +3110,7 @@ LRESULT TreeView::OnNotifyReflect(WPARAM wp, LPARAM lp) {
         DWORD pos = GetMessagePos();
         ev.mouseScreen.x = GET_X_LPARAM(pos);
         ev.mouseScreen.y = GET_Y_LPARAM(pos);
-        POINT pt{ev.mouseScreen.x, ev.mouseScreen.y};
+        POINT pt = ToPOINT(ev.mouseScreen);
         if (pt.x != -1) {
             MapWindowPoints(HWND_DESKTOP, nmhdr->hwndFrom, &pt, 1);
         }
@@ -3012,29 +3167,33 @@ using Gdiplus::StringFormat;
 using Gdiplus::TextRenderingHintClearTypeGridFit;
 using Gdiplus::UnitPixel;
 
+static void HwndTabsSetItemSize(HWND hwnd, Size sz) {
+    TabCtrl_SetItemSize(hwnd, sz.dx, sz.dy);
+}
+
 TabInfo::~TabInfo() {
     str::Free(text);
     str::Free(tooltip);
 }
 
-TabPainter::TabPainter(TabsCtrl* ctrl, Size tabSize) {
-    tabsCtrl = ctrl;
-    hwnd = tabsCtrl->hwnd;
-    Reshape(tabSize.dx, tabSize.dy);
-}
-
-TabPainter::~TabPainter() {
-    delete data;
-}
-
 // Calculates tab's elements, based on its width and height.
 // Generates a GraphicsPath, which is used for painting the tab, etc.
-bool TabPainter::Reshape(int dx, int dy) {
+void TabsCtrl::Layout() {
+    HwndScheduleRepaint(hwnd);
+    Rect rect = ClientRect(hwnd);
+    int dy = rect.dy;
+    int nTabs = GetTabCount();
+    if (nTabs == 0) {
+        return;
+    }
+    auto maxDx = (rect.dx - 5) / nTabs;
+    int dx = std::min(tabDefaultDx, maxDx);
     dx--;
     if (tabSize.dx == dx && tabSize.dy == dy) {
-        return false;
+        return;
     }
     tabSize = {dx, dy};
+    HwndTabsSetItemSize(hwnd, tabSize);
 
     GraphicsPath shape;
     // define tab's body
@@ -3060,18 +3219,20 @@ bool TabPainter::Reshape(int dx, int dy) {
     delete data;
     data = new PathData();
     shape.GetPathData(data);
-    return true;
 }
 
 // Finds the index of the tab, which contains the given point.
-int TabPainter::IndexFromPoint(int x, int y, bool* inXbutton) const {
+TabMouseState TabsCtrl::TabStateFromMousePosition(const Point& p) {
+    TabMouseState res;
     if (!data) {
-        return -1;
+        return res;
     }
-
+    if (p.x < 0 || p.y < 0) {
+        return res;
+    }
     int dx = tabSize.dx;
     int dy = tabSize.dy;
-    Gdiplus::Point point(x, y);
+    Gdiplus::Point point(p.x, p.y);
     Graphics gfx(hwnd);
     GraphicsPath shapes(data->Points, data->Types, data->Count);
     GraphicsPath shape;
@@ -3081,22 +3242,20 @@ int TabPainter::IndexFromPoint(int x, int y, bool* inXbutton) const {
     Rect rClient = ClientRect(hwnd);
     float yPosTab = inTitleBar ? 0.0f : float(rClient.dy - dy - 1);
     gfx.TranslateTransform(1.0f, yPosTab);
-    for (int i = 0; i < Count(); i++) {
+    int nTabs = GetTabCount();
+    for (int i = 0; i < nTabs; i++) {
         Gdiplus::Point pt(point);
         gfx.TransformPoints(Gdiplus::CoordinateSpaceWorld, Gdiplus::CoordinateSpaceDevice, &pt, 1);
-        if (shape.IsVisible(pt, &gfx)) {
-            iterator.NextMarker(&shape);
-            if (inXbutton) {
-                *inXbutton = shape.IsVisible(pt, &gfx) != 0;
-            }
-            return i;
+        if (!shape.IsVisible(pt, &gfx)) {
+            gfx.TranslateTransform(float(dx + 1), 0.0f);
+            continue;
         }
-        gfx.TranslateTransform(float(dx + 1), 0.0f);
+        iterator.NextMarker(&shape);
+        res.tabIdx = i;
+        res.overClose = shape.IsVisible(pt, &gfx) != 0;
+        return res;
     }
-    if (inXbutton) {
-        *inXbutton = false;
-    }
-    return -1;
+    return res;
 }
 
 // TODO: duplicated in Caption.cpp
@@ -3113,23 +3272,46 @@ static void PaintParentBackground(HWND hwnd, HDC hdc) {
 }
 
 // Paints the tabs that intersect the window's update rectangle.
-void TabPainter::Paint(HDC hdc, RECT& rc) const {
-    IntersectClipRect(hdc, rc.left, rc.top, rc.right, rc.bottom);
-#if 0
-        // paint the background
-        bool isTranslucentMode = inTitleBar && dwm::IsCompositionEnabled();
-        if (isTranslucentMode) {
-            PaintParentBackground(hwnd, hdc);
-        } else {
-            // note: not sure what color should be used here and painting
-            // background works fine
-            /*HBRUSH brush = CreateSolidBrush(colors.bar);
-            FillRect(hdc, &rc, brush);
-            DeleteObject(brush);*/
-        }
+void TabsCtrl::Paint(HDC hdc, RECT& rc) {
+    if (false) {
+        // TODO: why doesn't this work? Should just paint the rectangle
+        logfa("Paint(): x: %d, y: %d, dx: %d, dy: %d\n", rc.left, rc.top, RectDx(rc), RectDy(rc));
+        COLORREF col = RGB(0xff, 0, 0);
+        HBRUSH brush = CreateSolidBrush(col);
+        FillRect(hdc, &rc, brush);
+        DeleteObject(brush);
+        Rect r = ToRect(rc);
+        DrawLine(hdc, r);
+        return;
+    }
+
+    TabMouseState tabState = TabStateFromMousePosition(lastMousePos);
+    int tabUnderMouse = tabState.tabIdx;
+    bool overClose = tabState.overClose;
+
+    int tabSelected = GetSelected();
+
+    // IntersectClipRect(hdc, rc.left, rc.top, rc.right, rc.bottom);
+#if 1
+    // paint the background
+    bool isTranslucentMode = inTitleBar && dwm::IsCompositionEnabled();
+    if (isTranslucentMode) {
+        PaintParentBackground(hwnd, hdc);
+    } else {
+        // note: not sure what color should be used here and painting
+        // background works fine
+        HBRUSH brush = CreateSolidBrush(RGB(0xff, 0xff, 0xff));
+        FillRect(hdc, &rc, brush);
+        DeleteObject(brush);
+    }
 #else
     PaintParentBackground(hwnd, hdc);
 #endif
+
+    if (!data) {
+        return;
+    }
+
     // TODO: GDI+ doesn't seem to cope well with SetWorldTransform
     XFORM ctm = {1.0, 0, 0, 1.0, 0, 0};
     SetWorldTransform(hdc, &ctm);
@@ -3157,10 +3339,10 @@ void TabPainter::Paint(HDC hdc, RECT& rc) const {
     sf.SetLineAlignment(StringAlignmentCenter);
     sf.SetTrimming(Gdiplus::StringTrimmingEllipsisCharacter);
 
-    int selectedTab = tabsCtrl->GetSelected();
     float yPosTab = inTitleBar ? 0.0f : float(ClientRect(hwnd).dy - dy - 1);
-    for (int i = 0; i < Count(); i++) {
-        TabInfo* tab = tabsCtrl->GetTab(i);
+    int nTabs = GetTabCount();
+    for (int i = 0; i < nTabs; i++) {
+        TabInfo* tab = GetTab(i);
         gfx.ResetTransform();
         gfx.TranslateTransform(1.f + (float)(dx + 1) * i - (float)rc.left, yPosTab - (float)rc.top);
 
@@ -3174,25 +3356,27 @@ void TabPainter::Paint(HDC hdc, RECT& rc) const {
         COLORREF xColor = tabBackgroundCloseX;
         COLORREF circleColor = tabBackgroundCloseCircle;
 
-        if (selectedTab == i) {
+        if (tabSelected == i) {
             bgCol = tabSelectedBg;
             textCol = tabSelectedText;
             xColor = tabSelectedCloseX;
             circleColor = tabSelectedCloseCircle;
-        } else if (tabsCtrl->tabHighlighted == i) {
+        } else if (tabUnderMouse == i) {
             bgCol = tabHighlightedBg;
             textCol = tabHighlightedText;
             xColor = tabHighlightedCloseX;
             circleColor = tabHighlightedCloseCircle;
         }
-        if (tabsCtrl->tabHighlightedClose == i) {
+        if ((tabUnderMouse == i) && overClose) {
             xColor = tabHoveredCloseX;
             circleColor = tabHoveredCloseCircle;
         }
+#if 0
         if (tabsCtrl->tabBeingClosed == i) {
             xColor = tabClickedCloseX;
             circleColor = tabClickedCloseCircle;
         }
+#endif
 
         // paint tab's body
         gfx.SetCompositingMode(Gdiplus::CompositingModeSourceCopy);
@@ -3216,7 +3400,9 @@ void TabPainter::Paint(HDC hdc, RECT& rc) const {
         // paint "x"'s circle
         iterator.NextMarker(&shape);
         // bool closeCircleEnabled = true;
-        if ((tabsCtrl->tabBeingClosed == i || tabsCtrl->tabHighlightedClose == i) /*&& closeCircleEnabled*/) {
+        bool paintOverClose = (tabUnderMouse == i) && overClose;
+        // TODO: (tabsCtrl->tabBeingClosed == i
+        if (paintOverClose /*&& closeCircleEnabled*/) {
             br.SetColor(GdiRgbFromCOLORREF(circleColor));
             gfx.FillPath(&br, &shape);
         }
@@ -3227,11 +3413,6 @@ void TabPainter::Paint(HDC hdc, RECT& rc) const {
         gfx.DrawPath(&pen, &shape);
         iterator.Rewind();
     }
-}
-
-int TabPainter::Count() const {
-    int n = tabsCtrl->GetTabCount();
-    return n;
 }
 
 // TODO: this is a nasty implementation
@@ -3270,7 +3451,7 @@ static void MaybeUpdateTooltipText(TabsCtrl* tabsCtrl, int idx) {
     if (str::Eq(tabsCtrl->currTooltipText, tooltip)) {
         return;
     }
-    tabsCtrl->currTooltipText = tooltip;
+    tabsCtrl->currTooltipText.SetCopy(tooltip);
 #if 1
     HWND ttHwnd = tabsCtrl->GetToolTipsHwnd();
     MaybeUpdateTooltip(tabsCtrl->hwnd, ttHwnd, tooltip);
@@ -3294,7 +3475,7 @@ TabsCtrl::TabsCtrl() {
 }
 
 TabsCtrl::~TabsCtrl() {
-    delete painter;
+    delete data;
 }
 
 static void TriggerSelectionChanged(TabsCtrl* tabs) {
@@ -3319,7 +3500,7 @@ static bool TriggerSelectionChanging(TabsCtrl* tabs) {
 }
 
 static void TriggerTabClosed(TabsCtrl* tabs, int tabIdx) {
-    if (!tabs->onTabClosed) {
+    if ((tabIdx < 0) || !tabs->onTabClosed) {
         return;
     }
     TabClosedEvent ev;
@@ -3341,7 +3522,12 @@ static void TriggerTabDragged(TabsCtrl* tabs, int tab1, int tab2) {
 
 static void UpdateAfterDrag(TabsCtrl* tabsCtrl, int tab1, int tab2) {
     int nTabs = tabsCtrl->GetTabCount();
-    CrashIf(tab1 == tab2 || tab1 < 0 || tab2 < 0 || tab1 >= nTabs || tab2 >= nTabs);
+    bool badState = (tab1 == tab2) || (tab1 < 0) || (tab2 < 0) || (tab1 >= nTabs) || (tab2 >= nTabs);
+    if (badState) {
+        logfa("tab1: %d, tab2: %d, nTabs: %d\n", tab1, tab2, nTabs);
+        ReportIf(true);
+        return;
+    }
 
     auto&& tabs = tabsCtrl->tabs;
     std::swap(tabs.at(tab1), tabs.at(tab2));
@@ -3374,45 +3560,56 @@ LRESULT TabsCtrl::OnNotifyReflect(WPARAM wp, LPARAM lp) {
 }
 
 LRESULT TabsCtrl::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
-    PAINTSTRUCT ps;
-    HDC hdc;
     TCITEMW* tcs = nullptr;
 
-    TabPainter* tab = painter;
-    // for mouse messages
-    int x = GET_X_LPARAM(lp);
-    int y = GET_Y_LPARAM(lp);
-    bool overX = false; // if mouse cursor is over X
+    Point mousePos = {GET_X_LPARAM(lp), GET_Y_LPARAM(lp)};
+    TabMouseState tabState;
+
+    bool overClose = false;
     int tabUnderMouse = -1;
 
-    if (msg >= WM_MOUSEFIRST && msg <= WM_MOUSELAST) {
-        tabUnderMouse = tab->IndexFromPoint(x, y, &overX);
+    if (WM_MOUSELEAVE == msg) {
+        mousePos = {-1, -1};
+    }
+    if (WM_MOUSEMOVE == msg) {
+        TrackMouseLeave(hwnd);
+    }
+    if ((msg >= WM_MOUSEFIRST && msg <= WM_MOUSELAST) || (msg == WM_MOUSELEAVE)) {
+        tabState = TabStateFromMousePosition(mousePos);
+        tabUnderMouse = tabState.tabIdx;
+        overClose = tabState.overClose;
+        lastMousePos = mousePos;
+        const char* msgName = WinMsgName(msg);
+        // logfa("msg; %s, tabUnderMouse: %d, overClose: %d\n", msgName, tabUnderMouse, (int)overClose);
     }
 
     switch (msg) {
         case WM_NCHITTEST: {
-            if (!tab->inTitleBar || hwnd == GetCapture()) {
+            if (false) {
                 return HTCLIENT;
             }
-            POINT pt = {x, y};
-            ScreenToClient(hwnd, &pt);
-            if (-1 != tab->IndexFromPoint(pt.x, pt.y)) {
+            // parts that are HTTRANSPARENT are used to move the window
+            if (!inTitleBar || hwnd == GetCapture()) {
+                return HTCLIENT;
+            }
+            HwndScreenToClient(hwnd, mousePos);
+            tabState = TabStateFromMousePosition(mousePos);
+            if (tabState.tabIdx >= 0) {
                 return HTCLIENT;
             }
             return HTTRANSPARENT;
         }
 
+        case WM_SIZE:
+            Layout();
+            break;
+
         case WM_MOUSELEAVE:
-            wp = 0xff;
-            lp = 0;
             [[fallthrough]];
 
         case WM_MOUSEMOVE: {
-            if (0xff != wp) {
-                TrackMouseLeave(hwnd);
-            }
-
-            int hl = wp == 0xFF ? -1 : tabUnderMouse;
+            bool isDragging = (GetCapture() == hwnd);
+            int hl = tabUnderMouse;
             bool didChangeTabs = false;
             if (isDragging && hl == -1) {
                 // preserve the highlighted tab if it's dragged outside the tabs' area
@@ -3428,9 +3625,10 @@ LRESULT TabsCtrl::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 HwndScheduleRepaint(hwnd);
                 tabHighlighted = hl;
                 didChangeTabs = true;
+                return 0;
             }
             int xHl = -1;
-            if (overX && !isDragging) {
+            if (overClose && !isDragging) {
                 xHl = hl;
             }
             // logfa("inX=%d, hl=%d, xHl=%d, xHighlighted=%d\n", (int)inX, hl, xHl, tab->xHighlighted);
@@ -3439,18 +3637,17 @@ LRESULT TabsCtrl::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                 HwndScheduleRepaint(hwnd);
                 tabHighlightedClose = xHl;
             }
-            if (!overX) {
+            if (!overClose) {
                 tabBeingClosed = -1;
             }
             if (didChangeTabs && tabHighlighted >= 0) {
-                auto tabsCtrl = tab->tabsCtrl;
-                MaybeUpdateTooltipText(tabsCtrl, tabHighlighted);
+                MaybeUpdateTooltipText(this, tabHighlighted);
             }
             return 0;
         }
 
-        case WM_LBUTTONDOWN:
-            if (overX) {
+        case WM_LBUTTONDOWN: {
+            if (overClose) {
                 HwndScheduleRepaint(hwnd);
                 tabBeingClosed = tabUnderMouse;
             } else if (tabUnderMouse != -1) {
@@ -3464,96 +3661,99 @@ LRESULT TabsCtrl::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
                     TriggerSelectionChanged(this);
                     return 0;
                 }
-                isDragging = true;
                 SetCapture(hwnd);
-                return 0;
             }
+            return 0;
+        }
 
-        case WM_LBUTTONUP:
+        case WM_LBUTTONUP: {
             if (tabBeingClosed != -1) {
                 // send notification that the tab is closed
                 TriggerTabClosed(this, tabBeingClosed);
                 HwndScheduleRepaint(hwnd);
                 tabBeingClosed = -1;
             }
+            bool isDragging = (GetCapture() == hwnd);
             if (isDragging) {
                 isDragging = false;
                 ReleaseCapture();
             }
             return 0;
+        }
 
         case WM_MBUTTONDOWN: {
             // middle-clicking unconditionally closes the tab
-            tabBeingClosed = tab->IndexFromPoint(x, y);
+            tabBeingClosed = tabUnderMouse;
             HwndScheduleRepaint(hwnd);
             return 0;
         }
 
-        case WM_MBUTTONUP:
-            if (tabBeingClosed != -1) {
-                if (onTabClosed) {
-                    TabClosedEvent ev;
-                    ev.tabs = this;
-                    ev.tabIdx = tabBeingClosed;
-                    onTabClosed(&ev);
-                }
-                int clicked = tabBeingClosed;
-                HwndScheduleRepaint(hwnd);
-                tabBeingClosed = -1;
+        case WM_MBUTTONUP: {
+            if (tabBeingClosed < 0) {
+                return 0;
             }
+            TriggerTabClosed(this, tabBeingClosed);
+            HwndScheduleRepaint(hwnd);
             return 0;
+        }
 
         case WM_ERASEBKGND:
-            return TRUE;
+            return TRUE; // we handled it so don't erase
 
+        case WM_PAINT: {
+            PAINTSTRUCT ps;
+            RECT rc = ClientRECT(hwnd);
+            HDC hdc = BeginPaint(hwnd, &ps);
+            DoubleBuffer buffer(hwnd, ToRect(rc));
+            Paint(buffer.GetDC(), rc);
+            buffer.Flush(hdc);
+            EndPaint(hwnd, &ps);
+            return 0;
+        }
+
+#if 0
         case WM_PAINT: {
             RECT rc;
             GetUpdateRect(hwnd, &rc, FALSE);
             // TODO: when is wp != nullptr?
             hdc = wp ? (HDC)wp : BeginPaint(hwnd, &ps);
-
-            DoubleBuffer buffer(hwnd, Rect::FromRECT(rc));
-            tab->Paint(buffer.GetDC(), rc);
+#if 1
+            DoubleBuffer buffer(hwnd, ToRect(rc));
+            Paint(buffer.GetDC(), rc);
             buffer.Flush(hdc);
-
+#else
+            Paint(hdc, rc);
+#endif
             ValidateRect(hwnd, nullptr);
             if (!wp) {
                 EndPaint(hwnd, &ps);
             }
             return 0;
         }
+#endif
     }
 
     return WndProcDefault(hwnd, msg, wp, lp);
 }
 
 HWND TabsCtrl::Create(TabsCreateArgs& argsIn) {
-    createToolTipsHwnd = argsIn.createToolTipsHwnd;
+    witToolTips = argsIn.witToolTips;
 
     CreateControlArgs args;
     args.parent = argsIn.parent;
     args.font = argsIn.font;
     args.className = WC_TABCONTROLW;
-    args.style = WS_CHILD | WS_CLIPSIBLINGS | TCS_FOCUSNEVER | TCS_FIXEDWIDTH | TCS_FORCELABELLEFT | WS_VISIBLE;
-    if (createToolTipsHwnd) {
+    args.style = WS_CHILD | WS_CLIPSIBLINGS | WS_VISIBLE | TCS_FOCUSNEVER | TCS_FIXEDWIDTH | TCS_FORCELABELLEFT;
+    if (witToolTips) {
         args.style |= TCS_TOOLTIPS;
-    }
-
-    Size sz = argsIn.tabSize;
-    if (sz.dy == 0) {
-        sz.dy = DpiScale(args.parent, kTabBarDy);
-    }
-    if (sz.dx == 0) {
-        sz.dx = DpiScale(args.parent, kTabMinDx);
     }
 
     HWND hwnd = CreateControl(args);
     if (!hwnd) {
         return nullptr;
     }
-    painter = new TabPainter(this, sz);
 
-    if (createToolTipsHwnd) {
+    if (witToolTips) {
         HWND ttHwnd = GetToolTipsHwnd();
         TOOLINFO ti{0};
         ti.cbSize = sizeof(ti);
@@ -3597,7 +3797,7 @@ int TabsCtrl::InsertTab(int idx, TabInfo* tab) {
         }
     }
     tabBeingClosed = -1;
-    currTooltipText = tab->tooltip;
+    currTooltipText.SetCopy(tab->tooltip);
     return insertedIdx;
 }
 
@@ -3605,7 +3805,7 @@ void TabsCtrl::SetTextAndTooltip(int idx, const char* text, const char* tooltip)
     TabInfo* tab = GetTab(idx);
     str::ReplaceWithCopy(&tab->text, text);
     str::ReplaceWithCopy(&tab->tooltip, tooltip);
-    HwndScheduleRepaint(hwnd);
+    Layout();
 }
 
 // returns userData because it's not owned by TabsCtrl
@@ -3625,11 +3825,8 @@ UINT_PTR TabsCtrl::RemoveTab(int idx) {
     } else if (idx == selectedTab) {
         SetSelected(0);
     }
+    Layout();
     return userData;
-}
-
-TabInfo* TabsCtrl::GetTab(int idx) {
-    return tabs[idx];
 }
 
 // Note: the caller should take care of deleting userData
@@ -3640,6 +3837,11 @@ void TabsCtrl::RemoveAllTabs() {
     tabHighlightedClose = -1;
     DeleteVecMembers(tabs);
     tabs.Reset();
+    Layout();
+}
+
+TabInfo* TabsCtrl::GetTab(int idx) {
+    return tabs[idx];
 }
 
 int TabsCtrl::GetSelected() {
@@ -3651,13 +3853,6 @@ int TabsCtrl::SetSelected(int idx) {
     CrashIf(idx < 0 || idx >= GetTabCount());
     int prevSelectedIdx = TabCtrl_SetCurSel(hwnd, idx);
     return prevSelectedIdx;
-}
-
-void TabsCtrl::SetTabSize(Size sz) {
-    TabCtrl_SetItemSize(hwnd, sz.dx, sz.dy);
-    painter->Reshape(sz.dx, sz.dy);
-    tabBeingClosed = -1;
-    // MaybeUpdateTooltipText(this);
 }
 
 HWND TabsCtrl::GetToolTipsHwnd() {
@@ -3810,4 +4005,69 @@ void DeleteWnd(Checkbox** wnd) {
 void DeleteWnd(Progress** wnd) {
     delete *wnd;
     *wnd = nullptr;
+}
+
+void DrawCloseButton(const DrawCloseButtonArgs& args) {
+    bool isHover = args.isHover;
+    const Rect& r = args.r;
+    Gdiplus::Graphics g(args.hdc);
+    g.SetCompositingQuality(Gdiplus::CompositingQualityHighQuality);
+    g.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+    g.SetPageUnit(Gdiplus::UnitPixel);
+    HWND hwnd = WindowFromDC(args.hdc);
+    // GDI+ doesn't pick up the window's orientation through the device context,
+    // so we have to explicitly mirror all rendering horizontally
+    if (IsRtl(hwnd)) {
+        g.ScaleTransform(-1, 1);
+        g.TranslateTransform((float)ClientRect(hwnd).dx, 0, Gdiplus::MatrixOrderAppend);
+    }
+    Gdiplus::Color c;
+
+    // in onhover state, background is a red-ish circle
+    if (args.isHover) {
+        c.SetFromCOLORREF(args.colHoverBg);
+        Gdiplus::SolidBrush b(c);
+        g.FillEllipse(&b, r.x, r.y, r.dx - 2, r.dy - 2);
+    }
+
+    // draw 'x'
+    c.SetFromCOLORREF(args.isHover ? args.colXHover : args.colX);
+    g.TranslateTransform((float)r.x, (float)r.y);
+    Gdiplus::Pen p(c, 2);
+    if (isHover) {
+        g.DrawLine(&p, Gdiplus::Point(4, 4), Gdiplus::Point(r.dx - 6, r.dy - 6));
+        g.DrawLine(&p, Gdiplus::Point(r.dx - 6, 4), Gdiplus::Point(4, r.dy - 6));
+    } else {
+        g.DrawLine(&p, Gdiplus::Point(4, 5), Gdiplus::Point(r.dx - 6, r.dy - 5));
+        g.DrawLine(&p, Gdiplus::Point(r.dx - 6, 5), Gdiplus::Point(4, r.dy - 5));
+    }
+}
+
+void DrawCloseButton2(const DrawCloseButtonArgs& args) {
+    bool isHover = args.isHover;
+    HDC hdc = args.hdc;
+    const Rect& r = args.r;
+    COLORREF lineCol = args.colX;
+    if (args.isHover) {
+        lineCol = args.colXHover;
+        int p = 3;
+        HWND hwnd = WindowFromDC(hdc);
+        DpiScale(hwnd, p);
+        AutoDeleteBrush brush(CreateSolidBrush(args.colHoverBg));
+        ScopedSelectBrush br(hdc, brush);
+        RECT r2 = ToRECT(r);
+        r2.left -= p;
+        r2.right += p;
+        r2.top -= p;
+        r2.bottom += p;
+        FillRect(hdc, &r2, brush);
+        // Ellipse(hdc, r2.left, r2.top, r2.right, r2.bottom);
+    }
+    AutoDeletePen pen(CreatePen(PS_SOLID, 2, lineCol));
+    ScopedSelectPen p(hdc, pen);
+    MoveToEx(hdc, r.x, r.y, nullptr);
+    LineTo(hdc, r.x + r.dx, r.y + r.dy);
+
+    MoveToEx(hdc, r.x + r.dx, r.y, nullptr);
+    LineTo(hdc, r.x, r.y + r.dy);
 }

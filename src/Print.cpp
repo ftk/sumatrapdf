@@ -102,11 +102,6 @@ void Printer::SetDevMode(DEVMODEW* dm) {
 Printer::~Printer() {
     str::Free(name);
     free((void*)devMode);
-
-    for (int i = 0; i < nBins; i++) {
-        str::Free(binNames[i]);
-    }
-
     free((void*)papers);
     free((void*)paperSizes);
     free((void*)bins);
@@ -282,6 +277,7 @@ static bool PrintToDevice(const PrintData& pd) {
         return false;
     }
 
+    logf("PrintToDevice: printer: '%s', file: '%s'\n", pd.printer->name, pd.engine->FilePath());
     auto progressUI = pd.progressUI;
     auto abortCookie = pd.abortCookie;
     int res;
@@ -298,7 +294,7 @@ static bool PrintToDevice(const PrintData& pd) {
         }
         di.lpszDocName = ToWstrTemp(fileName);
     } else {
-        di.lpszDocName = ToWstrTemp(engine.FileName());
+        di.lpszDocName = ToWstrTemp(engine.FilePath());
     }
 
     int current = 1, total = 0;
@@ -330,7 +326,21 @@ static bool PrintToDevice(const PrintData& pd) {
     auto devMode = pd.printer->devMode;
     // http://blogs.msdn.com/b/oldnewthing/archive/2012/11/09/10367057.aspx
     WCHAR* printerName = ToWstrTemp(pd.printer->name);
-    AutoDeleteDC hdc(CreateDCW(nullptr, printerName, nullptr, devMode));
+
+    {
+        // validate printer settings as per
+        // https://docs.microsoft.com/en-us/windows/win32/printdocs/documentproperties
+        // TODO: maybe do this in NewPrinter?
+        DWORD mode = DM_IN_BUFFER | DM_OUT_BUFFER;
+        HANDLE hPrinter = nullptr;
+        BOOL ok = OpenPrinterW(printerName, &hPrinter, nullptr);
+        if (ok && hPrinter) {
+            DocumentPropertiesW(nullptr, hPrinter, printerName, devMode, devMode, mode);
+        }
+        ClosePrinter(hPrinter);
+    }
+
+    AutoDeleteDC hdc = CreateDCW(nullptr, printerName, nullptr, devMode);
     if (!hdc) {
         logf("PrintToDevice: CreateDCW('%s') failed\n", pd.printer->name);
         return false;
@@ -552,6 +562,7 @@ static bool PrintToDevice(const PrintData& pd) {
         logf("PrintToDevice: EndDoc() failed with %d\n", res);
         return false;
     }
+    logf("PrintToDevice: finished ok\n");
     return true;
 }
 
@@ -746,7 +757,7 @@ void PrintCurrentFile(MainWindow* win, bool waitForCompletion) {
     // the Print dialog allows access to the file system, so fall back
     // to printing the entire document without dialog if that isn't desired
     if (!HasPermission(Perm::DiskAccess)) {
-        PrintFile(dm->GetEngine());
+        PrintFile2(dm->GetEngine());
         return;
     }
 
@@ -1172,9 +1183,11 @@ static void SetPrinterCustomPaperSizeForEngine(EngineBase* engine, Printer* prin
     SetCustomPaperSize(printer, size);
 }
 
-bool PrintFile(EngineBase* engine, char* printerName, bool displayErrors, const char* settings) {
+bool PrintFile2(EngineBase* engine, char* printerName, bool displayErrors, const char* settings) {
     bool ok = false;
     Printer* printer = nullptr;
+
+    logf("PrintFile2: file: '%s', printer: '%s'\n", engine->FilePath(), printerName);
 
     if (!HasPermission(Perm::PrinterAccess)) {
         return false;
@@ -1233,6 +1246,7 @@ bool PrintFile(EngineBase* engine, char* printerName, bool displayErrors, const 
             MessageBoxWarningCond(displayErrors, _TRA("Couldn't initialize printer"), _TRA("Printing problem."));
         }
     }
+    logf("PrintFile2: finished ok\n");
     return ok;
 }
 
@@ -1245,7 +1259,8 @@ bool PrintFile(const char* fileName, char* printerName, bool displayErrors, cons
         MessageBoxWarningCond(displayErrors, msg, "Error");
         return false;
     }
-    bool ok = PrintFile(engine, printerName, displayErrors, settings);
+    bool ok = PrintFile2(engine, printerName, displayErrors, settings);
     delete engine;
+    logfa("PrintFile: finished ok\n");
     return ok;
 }

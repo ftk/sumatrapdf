@@ -74,12 +74,6 @@ struct MenuOwnerDrawInfo {
     HBITMAP hbmpItem = nullptr;
 };
 
-struct MenuDef {
-    const char* title = nullptr;
-    UINT_PTR idOrSubmenu = 0;
-};
-
-constexpr const char* kMenuSeparator = "-----";
 constexpr UINT kMenuSeparatorID = (UINT)-13;
 
 bool gAddCrashMeMenu = false;
@@ -95,48 +89,7 @@ bool gShowDebugMenu = false;
 static_assert(CmdViewLayoutLast - CmdViewLayoutFirst == 4, "view layout ids are not in a continuous range");
 static_assert(CmdZoomLast - CmdZoomFirst == 17, "zoom ids are not in a continuous range");
 
-MenuDef menuDefContextToc[] = {
-    {
-        _TRN("Expand All"),
-        CmdExpandAll,
-    },
-    {
-        _TRN("Collapse All"),
-        CmdCollapseAll,
-    },
-    {
-        kMenuSeparator,
-        0,
-    },
-    {
-        _TRN("Open Embedded PDF"),
-        CmdOpenEmbeddedPDF,
-    },
-    {
-        _TRN("Save Embedded File..."),
-        CmdSaveEmbeddedFile,
-    },
-    // note: strings cannot be "" or else items are not there
-    {
-        "Add to favorites",
-        CmdFavoriteAdd,
-    },
-    {
-        "Remove from favorites",
-        CmdFavoriteDel,
-    },
-    {
-        nullptr,
-        0,
-    },
-};
-
-MenuDef menuDefContextFav[] = {{_TRN("Remove from favorites"), CmdFavoriteDel},
-                               {
-                                   nullptr,
-                                   0,
-                               }};
-
+// clang-format off
 //[ ACCESSKEY_GROUP File Menu
 static MenuDef menuDefFile[] = {
     {
@@ -761,7 +714,7 @@ static MenuDef menuDefContext[] = {
     },
     {
         kMenuSeparator,
-        0,
+        kMenuSeparatorID,
     },
     {
         _TRN("Select Annotation in Editor"),
@@ -823,6 +776,7 @@ static MenuDef menuDefContextStart[] = {
 };
 
 //] ACCESSKEY_GROUP Context Menu (Start)
+// clang-format on
 
 // clang-format off
 // those menu items will be disabled if no document is opened, enabled otherwise

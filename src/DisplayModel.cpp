@@ -83,7 +83,7 @@ bool ScrollState::operator==(const ScrollState& other) const {
 }
 
 const char* DisplayModel::GetFilePath() const {
-    return engine->FileName();
+    return engine->FilePath();
 }
 
 const char* DisplayModel::GetDefaultFileExt() const {
@@ -217,7 +217,7 @@ bool DisplayModel::GetPresentationMode() const {
 }
 
 void DisplayModel::GetDisplayState(FileState* fs) {
-    const char* fileNameA = engine->FileName();
+    const char* fileNameA = engine->FilePath();
     SetFileStatePath(fs, fileNameA);
 
     fs->useDefaultState = !gGlobalPrefs->rememberStatePerDocument;
@@ -1353,9 +1353,9 @@ bool DisplayModel::GoToNextPage() {
     int firstPageInNewRow = FirstPageInARowNo(currPageNo + columns, columns, IsBookView(GetDisplayMode()));
     if (firstPageInNewRow > PageCount()) {
         /* we're on a last row or after it, can't go any further */
-        auto win = FindMainWindowByFile(this->engine->FileName(), true);
+        auto win = FindMainWindowByFile(this->engine->FilePath(), true);
         if (win) {
-            BrowseFolder(win, true);
+            OpenNextPrevFileInFolder(win, true);
         }
         return false;
     }
@@ -1384,9 +1384,9 @@ bool DisplayModel::GoToPrevPage(int scrollY) {
     int firstPageInNewRow = FirstPageInARowNo(currPageNo - columns, columns, IsBookView(GetDisplayMode()));
     if (firstPageInNewRow < 1 || 1 == currPageNo) {
         /* we're on a first page, can't go back */
-        auto win = FindMainWindowByFile(this->engine->FileName(), true);
+        auto win = FindMainWindowByFile(this->engine->FilePath(), true);
         if (win) {
-            BrowseFolder(win, false);
+            OpenNextPrevFileInFolder(win, false);
         }
         return false;
     }
@@ -1758,6 +1758,7 @@ ScrollState DisplayModel::GetScrollState() {
     ScrollState state(FirstVisiblePageNo(), -1, -1);
     if (!ValidPageNo(state.page)) {
         state.page = CurrentPageNo();
+        CrashIf(!ValidPageNo(state.page));
     }
 
     PageInfo* pageInfo = GetPageInfo(state.page);

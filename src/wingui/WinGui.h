@@ -5,6 +5,8 @@
 
 UINT_PTR NextSubclassId();
 
+const char* WinMsgName(UINT);
+
 LRESULT TryReflectMessages(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam);
 enum WindowBorderStyle { kWindowBorderNone, kWindowBorderClient, kWindowBorderStatic };
 
@@ -68,6 +70,7 @@ struct Wnd : public ILayout {
     int MinIntrinsicWidth(int height) override;
     Size Layout(Constraints bc) override;
     void SetBounds(Rect) override;
+
     void SetInsetsPt(int top, int right = -1, int bottom = -1, int left = -1);
 
     void Attach(HWND hwnd);
@@ -475,6 +478,8 @@ struct Splitter : public Wnd {
 
 //--- Webview2
 
+char* GetWebView2VersionTemp();
+
 // TODO: maybe hide those inside a private struct
 typedef interface ICoreWebView2 ICoreWebView2;
 typedef interface ICoreWebView2Controller ICoreWebView2Controller;
@@ -640,41 +645,9 @@ struct TabsCtrl;
 
 #define kTabDefaultBgCol (COLORREF) - 1
 
-// TODO: make it private to WinGui.cpp
-struct TabPainter {
-    TabsCtrl* tabsCtrl = nullptr;
-    PathData* data = nullptr;
-    Size tabSize;
-
-    HWND hwnd = nullptr;
-
-    // TODO: set those to reasonable defaults
-    COLORREF currBgCol = kTabDefaultBgCol;
-    COLORREF tabBackgroundBg = 0;
-    COLORREF tabBackgroundText = 0;
-    COLORREF tabBackgroundCloseX = 0;
-    COLORREF tabBackgroundCloseCircle = 0;
-    COLORREF tabSelectedBg = 0;
-    COLORREF tabSelectedText = 0;
-    COLORREF tabSelectedCloseX = 0;
-    COLORREF tabSelectedCloseCircle = 0;
-    COLORREF tabHighlightedBg = 0;
-    COLORREF tabHighlightedText = 0;
-    COLORREF tabHighlightedCloseX = 0;
-    COLORREF tabHighlightedCloseCircle = 0;
-    COLORREF tabHoveredCloseX = 0;
-    COLORREF tabHoveredCloseCircle = 0;
-    COLORREF tabClickedCloseX = 0;
-    COLORREF tabClickedCloseCircle = 0;
-
-    bool inTitleBar = false;
-
-    TabPainter(TabsCtrl* ctrl, Size tabSize);
-    ~TabPainter();
-    bool Reshape(int dx, int dy);
-    int IndexFromPoint(int x, int y, bool* inXbutton = nullptr) const;
-    void Paint(HDC hdc, RECT& rc) const;
-    int Count() const;
+struct TabMouseState {
+    int tabIdx = -1;
+    bool overClose = false;
 };
 
 struct TabClosedEvent {
@@ -710,27 +683,32 @@ using TabDraggedHandler = std::function<void(TabDraggedEvent*)>;
 struct TabsCreateArgs {
     HWND parent = nullptr;
     HFONT font = nullptr;
-    bool createToolTipsHwnd = false;
+    bool witToolTips = false;
     int ctrlID = 0;
-    Size tabSize = {};
+    int tabDefaultDx = 300;
 };
-
-struct TabPainter;
 
 struct TabInfo {
     char* text = nullptr;
     char* tooltip = nullptr;
+    bool isPinned = false;
     UINT_PTR userData = 0;
 
     TabInfo() = default;
     ~TabInfo();
+
+    // for internal use
+    Rect pos;
+    Rect closePos;
 };
 
 struct TabsCtrl : Wnd {
     int ctrlID = 0;
-    TabPainter* painter = nullptr;
-    bool createToolTipsHwnd = false;
-    char* currTooltipText = nullptr; // not owned by us
+    bool witToolTips = false;
+    AutoFreeStr currTooltipText;
+    bool inTitleBar = false;
+    // dx of tab if there's more space available
+    int tabDefaultDx = 300;
 
     Vec<TabInfo*> tabs;
 
@@ -738,12 +716,34 @@ struct TabsCtrl : Wnd {
     int tabHighlighted = -1;
     int tabHighlightedClose = -1;
     int tabBeingClosed = -1;
-    bool isDragging = false;
+    Point lastMousePos;
 
     TabClosedHandler onTabClosed = nullptr;
     TabsSelectionChangingHandler onSelectionChanging = nullptr;
     TabsSelectionChangedHandler onSelectionChanged = nullptr;
     TabDraggedHandler onTabDragged = nullptr;
+
+    // TODO: set those to reasonable defaults
+    COLORREF currBgCol = kTabDefaultBgCol;
+    COLORREF tabBackgroundBg = 0;
+    COLORREF tabBackgroundText = 0;
+    COLORREF tabBackgroundCloseX = 0;
+    COLORREF tabBackgroundCloseCircle = 0;
+    COLORREF tabSelectedBg = 0;
+    COLORREF tabSelectedText = 0;
+    COLORREF tabSelectedCloseX = 0;
+    COLORREF tabSelectedCloseCircle = 0;
+    COLORREF tabHighlightedBg = 0;
+    COLORREF tabHighlightedText = 0;
+    COLORREF tabHighlightedCloseX = 0;
+    COLORREF tabHighlightedCloseCircle = 0;
+    COLORREF tabHoveredCloseX = 0;
+    COLORREF tabHoveredCloseCircle = 0;
+    COLORREF tabClickedCloseX = 0;
+    COLORREF tabClickedCloseCircle = 0;
+
+    PathData* data = nullptr;
+    Size tabSize{-1, -1};
 
     TabsCtrl();
     ~TabsCtrl() override;
@@ -765,24 +765,26 @@ struct TabsCtrl : Wnd {
     UINT_PTR RemoveTab(int idx);
 
     template <typename T>
-    T* RemoveTab(int idx) {
+    T RemoveTab(int idx) {
         UINT_PTR res = RemoveTab(idx);
-        return (T*)res;
+        return (T)res;
     }
     void RemoveAllTabs();
 
     int GetSelected();
     int SetSelected(int idx);
 
-    void SetTabSize(Size sz);
-
     HWND GetToolTipsHwnd();
+
+    void Layout();
+    TabMouseState TabStateFromMousePosition(const Point& p);
+    void Paint(HDC hdc, RECT& rc);
 };
 
 template <typename T>
-T* GetTabsUserData(TabsCtrl* tabs, int idx) {
+T GetTabsUserData(TabsCtrl* tabs, int idx) {
     TabInfo* tabInfo = tabs->GetTab(idx);
-    return (T*)tabInfo->userData;
+    return (T)tabInfo->userData;
 }
 
 void DeleteWnd(Static**);
@@ -796,3 +798,19 @@ int RunMessageLoop(HACCEL accelTable, HWND hwndDialog);
 // TODO: those are hacks
 HWND GetCurrentModelessDialog();
 void SetCurrentModelessDialog(HWND);
+
+#define kColCloseX RGB(0xa0, 0xa0, 0xa0)
+#define kColCloseXHover RGB(0xf9, 0xeb, 0xeb)   // white-ish
+#define kColCloseXHoverBg RGB(0xC1, 0x35, 0x35) // red-ish
+
+struct DrawCloseButtonArgs {
+    HDC hdc = nullptr;
+    Rect r;
+    bool isHover = false;
+    COLORREF colHoverBg = kColCloseXHoverBg;
+    COLORREF colX = kColCloseX;
+    COLORREF colXHover = kColCloseXHover;
+};
+
+void DrawCloseButton(const DrawCloseButtonArgs& args);
+void DrawCloseButton2(const DrawCloseButtonArgs&);

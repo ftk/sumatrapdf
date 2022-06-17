@@ -683,7 +683,7 @@ DWORD WINAPI RenderCache::RenderCacheThread(LPVOID data) {
         }
         auto durMs = TimeSinceInMs(timeStart);
         if (durMs > 100) {
-            auto path = engine->FileName();
+            auto path = engine->FilePath();
             logfa("Slow rendering: %.2f ms, page: %d in '%s'\n", (float)durMs, req.pageNo, path);
         }
 
@@ -768,7 +768,7 @@ int RenderCache::PaintTile(HDC hdc, Rect bounds, DisplayModel* dm, int pageNo, T
         if (gShowTileLayout) {
             HPEN pen = CreatePen(PS_SOLID, 1, RGB(0xff, 0xff, 0x00));
             HGDIOBJ oldPen = SelectObject(hdc, pen);
-            PaintRect(hdc, bounds);
+            DrawRect(hdc, bounds);
             DeletePen(SelectObject(hdc, oldPen));
         }
     }

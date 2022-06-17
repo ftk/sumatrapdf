@@ -117,7 +117,7 @@ void CreateMovePatternLazy(MainWindow* win) {
 MainWindow::~MainWindow() {
     FinishStressTest(this);
 
-    CrashIf(tabs.size() > 0);
+    CrashIf(TabsCount() > 0);
     // CrashIf(ctrl); // TODO: seen in crash report
     CrashIf(linkOnLastButtonDown);
     CrashIf(annotationOnLastButtonDown);
@@ -140,8 +140,9 @@ MainWindow::~MainWindow() {
     delete buffer;
     delete tabSelectionHistory;
     DeleteCaption(caption);
-    DeleteVecMembers(tabs);
     DeleteVecMembers(staticLinks);
+    auto tabs = Tabs();
+    DeleteVecMembers(tabs);
     delete tabsCtrl;
     // cbHandler is passed into DocController and must be deleted afterwards
     // (all controllers should have been deleted prior to MainWindow, though)
@@ -168,7 +169,7 @@ void ClearMouseState(MainWindow* win) {
 }
 
 bool MainWindow::IsAboutWindow() const {
-    return nullptr == CurrentTab();
+    return nullptr == CurrentTab() || CurrentTab()->IsAboutTab();
 }
 
 bool MainWindow::IsDocLoaded() const {
@@ -179,6 +180,60 @@ bool MainWindow::IsDocLoaded() const {
         ReportIf(true);
     }
     return isLoaded;
+}
+
+WindowTab* MainWindow::CurrentTab() const {
+    WindowTab* curr = currentTabTemp;
+    if (curr != nullptr) {
+        return curr;
+    }
+    if (!tabsCtrl) {
+        return nullptr;
+    }
+    int idx = tabsCtrl->GetSelected();
+    if (idx >= 0) {
+        curr = GetTab(idx);
+        return curr;
+    }
+#if 0
+    int nTabs = TabsCount();
+    CrashIf(nTabs > 0);
+    if (nTabs > 0) {
+        curr = GetTab(0);
+        return curr;
+    }
+#endif
+    return nullptr;
+}
+
+int MainWindow::TabsCount() const {
+    return tabsCtrl->GetTabCount();
+}
+
+WindowTab* MainWindow::GetTab(int idx) const {
+    WindowTab* tab = GetTabsUserData<WindowTab*>(tabsCtrl, idx);
+    return tab;
+}
+
+int MainWindow::GetTabIdx(WindowTab* tab) const {
+    int nTabs = tabsCtrl->GetTabCount();
+    for (int i = 0; i < nTabs; i++) {
+        WindowTab* t = GetTabsUserData<WindowTab*>(tabsCtrl, i);
+        if (t == tab) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+Vec<WindowTab*> MainWindow::Tabs() const {
+    Vec<WindowTab*> res;
+    int nTabs = tabsCtrl->GetTabCount();
+    for (int i = 0; i < nTabs; i++) {
+        WindowTab* tab = GetTabsUserData<WindowTab*>(tabsCtrl, i);
+        res.Append(tab);
+    }
+    return res;
 }
 
 DisplayModel* MainWindow::AsFixed() const {
@@ -442,7 +497,8 @@ void LinkHandler::LaunchFile(const char* pathOrig, IPageDestination* link) {
     }
 
     if (!newWin->IsDocLoaded()) {
-        CloseCurrentTab(newWin);
+        bool quitIfLast = false;
+        CloseCurrentTab(newWin, quitIfLast);
         // OpenFileExternally rejects files we'd otherwise
         // have to show a notification to be sure (which we
         // consider bad UI and thus simply don't)
@@ -630,7 +686,7 @@ MainWindow* FindMainWindowByHwnd(HWND hwnd) {
 // it validates that WindowTab is still valid
 MainWindow* FindMainWindowByWindowTab(WindowTab* tabToFind) {
     for (MainWindow* win : gWindows) {
-        for (WindowTab* tab : win->tabs) {
+        for (WindowTab* tab : win->Tabs()) {
             if (tab == tabToFind) {
                 return win;
             }
@@ -641,7 +697,7 @@ MainWindow* FindMainWindowByWindowTab(WindowTab* tabToFind) {
 
 MainWindow* FindMainWindowByController(DocController* ctrl) {
     for (auto& win : gWindows) {
-        for (auto& tab : win->tabs) {
+        for (auto& tab : win->Tabs()) {
             if (tab->ctrl == ctrl) {
                 return win;
             }

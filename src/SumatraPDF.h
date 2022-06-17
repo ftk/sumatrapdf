@@ -106,7 +106,8 @@ bool HasPermission(Perm permission);
 bool IsUIRightToLeft();
 bool SumatraLaunchBrowser(const char* url);
 bool OpenFileExternally(const char* path);
-void CloseCurrentTab(MainWindow* win, bool quitIfLast = false);
+void CloseCurrentTab(MainWindow* win, bool quitIfLast);
+void CloseTab(WindowTab* tab, bool quitIfLast);
 bool CanCloseWindow(MainWindow* win);
 void CloseWindow(MainWindow* win, bool quitIfLast, bool forceClose);
 void SetSidebarVisibility(MainWindow* win, bool tocVisible, bool showFavorites);
@@ -120,6 +121,7 @@ void UpdateTabFileDisplayStateForTab(WindowTab* tab);
 void ReloadDocument(MainWindow* win, bool autoRefresh);
 void ToggleFullScreen(MainWindow* win, bool presentation = false);
 void RelayoutWindow(MainWindow* win);
+void DuplicateTabInNewWindow(WindowTab* tab);
 
 // note: background tabs are only searched if focusTab is true
 MainWindow* FindMainWindowByFile(const char* file, bool focusTab);
@@ -183,4 +185,4 @@ void ShutdownCleanup();
 bool DocIsSupportedFileType(Kind);
 char* GetLogFilePath();
 
-void BrowseFolder(MainWindow* win, bool forward);
+void OpenNextPrevFileInFolder(MainWindow* win, bool forward);

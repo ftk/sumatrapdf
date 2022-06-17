@@ -86,11 +86,12 @@ struct MainWindow {
     // TODO: use CurrentTab()->ctrl instead
     DocController* ctrl = nullptr; // owned by CurrentTab()
 
-    Vec<WindowTab*> tabs;
     WindowTab* currentTabTemp = nullptr; // points into tabs
-    WindowTab* CurrentTab() const {
-        return currentTabTemp;
-    }
+    WindowTab* CurrentTab() const;
+    int TabsCount() const;
+    Vec<WindowTab*> Tabs() const;
+    WindowTab* GetTab(int idx) const;
+    int GetTabIdx(WindowTab*) const;
 
     HWND hwndFrame = nullptr;
     HWND hwndCanvas = nullptr;

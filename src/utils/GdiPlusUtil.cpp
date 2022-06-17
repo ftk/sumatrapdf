@@ -260,8 +260,15 @@ void GetBaseTransform(Matrix& m, Gdiplus::RectF pageRect, float zoom, int rotati
     m.Rotate((float)rotation, MatrixOrderAppend);
 }
 
+static Gdiplus::RotateFlipType rfts[] = {
+    Gdiplus::RotateNoneFlipX,  Gdiplus::Rotate180FlipNone, Gdiplus::Rotate180FlipX,    Gdiplus::Rotate90FlipX,
+    Gdiplus::Rotate90FlipNone, Gdiplus::Rotate270FlipX,    Gdiplus::Rotate270FlipNone,
+};
+
 static Bitmap* WICDecodeImageFromStream(IStream* stream) {
     ScopedCom com;
+    HRESULT hr;
+    int iRot = -1;
 
 #define HR(hr)      \
     if (FAILED(hr)) \
@@ -275,6 +282,20 @@ static Bitmap* WICDecodeImageFromStream(IStream* stream) {
     ScopedComPtr<IWICBitmapFrameDecode> srcFrame;
     HR(pDecoder->GetFrame(0, &srcFrame));
     ScopedComPtr<IWICFormatConverter> pConverter;
+
+    ScopedComPtr<IWICMetadataQueryReader> pMetadataReader;
+
+    hr = srcFrame->GetMetadataQueryReader(&pMetadataReader);
+    if (SUCCEEDED(hr)) {
+        PROPVARIANT variant;
+        PropVariantInit(&variant);
+        // hr = pMetadataReader->GetMetadataByName(L"/app1/ifd/exif/{ushort=274}", &variant);
+        hr = pMetadataReader->GetMetadataByName(L"/app1/ifd/{ushort=274}", &variant);
+        if (SUCCEEDED(hr)) {
+            iRot = (int)variant.uintVal - 2;
+        }
+    }
+
     HR(pFactory->CreateFormatConverter(&pConverter));
     HR(pConverter->Initialize(srcFrame, GUID_WICPixelFormat32bppBGRA, WICBitmapDitherTypeNone, nullptr, 0.f,
                               WICBitmapPaletteTypeCustom));
@@ -294,8 +315,39 @@ static Bitmap* WICDecodeImageFromStream(IStream* stream) {
     bmp.UnlockBits(&bmpData);
     bmp.SetResolution((float)xres, (float)yres);
 #undef HR
-
+    // TODO: maybe use IWICBitmapFlipRotator
+    if (iRot >= 0 && iRot < dimof(rfts)) {
+        bmp.RotateFlip(rfts[iRot]);
+    }
     return bmp.Clone(0, 0, w, h, PixelFormat32bppARGB);
+}
+
+static void MaybeFlipBitmap(Bitmap* bmp) {
+    u8 buf[64] = {0}; // empirically is 26
+
+    UINT propSize = bmp->GetPropertyItemSize(PropertyTagOrientation);
+    if (propSize == 0) {
+        bmp->GetLastStatus(); // clear last status
+        return;
+    }
+    CrashIf(propSize > dimof(buf));
+
+    auto status = bmp->GetPropertyItem(PropertyTagOrientation, propSize, (Gdiplus::PropertyItem*)buf);
+    if (status != Status::Ok) {
+        bmp->GetLastStatus(); // clear last status
+        return;
+    }
+    auto propItem = (Gdiplus::PropertyItem*)buf;
+    u16* propValPtr = (u16*)propItem->value;
+    u16 iRot = propValPtr[0] - 2;
+    // https://stackoverflow.com/questions/6222053/problem-reading-jpeg-metadata-orientation
+    // Note: flip values are different than http://www.ionicwind.com/forums/index.php?topic=3267.0
+    // and https://github.com/larryli/PhotoTime/blob/3c77913e4c5ee46ab25dcc6e74a3f4c7502dbec2/gdip.c#L111
+    // is different still
+    // https://github.com/larryli/PhotoTime/blob/3c77913e4c5ee46ab25dcc6e74a3f4c7502dbec2/gdip.c#L130
+    if (iRot >= 0 && iRot < dimof(rfts)) {
+        bmp->RotateFlip(rfts[iRot]);
+    }
 }
 
 static Bitmap* DecodeWithWIC(const ByteSlice& bmpData) {
@@ -322,6 +374,7 @@ static Bitmap* DecodeWithGdiplus(const ByteSlice& bmpData) {
         delete bmp;
         return nullptr;
     }
+    MaybeFlipBitmap(bmp);
     return bmp;
 }
 

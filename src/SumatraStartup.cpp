@@ -1026,6 +1026,9 @@ ContinueOpenWindow:
         for (SessionData* data : *gGlobalPrefs->sessionData) {
             win = CreateAndShowMainWindow(data);
             for (TabState* state : *data->tabStates) {
+                if (!state->filePath) {
+                    continue;
+                }
                 // TODO: if SaveSettings() is called, it deletes gGlobalPrefs->sessionData
                 // we're currently iterating (happened e.g. if the file is deleted)
                 // the current fix is to not call SaveSettings() below but maybe there's a better way

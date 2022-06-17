@@ -9,11 +9,6 @@
 #define DRAGQUERY_NUMFILES 0xFFFFFFFF
 
 bool ToBool(BOOL b);
-int RectDx(const RECT& r);
-int RectDy(const RECT& r);
-POINT MakePoint(long x, long y);
-SIZE MakeSize(long dx, long dy);
-RECT MakeRect(long x, long y, long dx, long dy);
 
 RECT ClientRECT(HWND);
 Rect ClientRect(HWND);
@@ -108,8 +103,8 @@ void LimitWindowSizeToScreen(HWND hwnd, SIZE& size);
 Rect GetFullscreenRect(HWND);
 Rect GetVirtualScreenRect();
 
-void PaintRect(HDC, Rect);
-void PaintLine(HDC, Rect);
+void DrawRect(HDC, Rect);
+void DrawLine(HDC, Rect);
 void DrawCenteredText(HDC hdc, Rect r, const WCHAR* txt, bool isRTL = false);
 void DrawCenteredText(HDC, const RECT& r, const WCHAR* txt, bool isRTL = false);
 Size TextSizeInHwnd(HWND, const WCHAR*, HFONT = nullptr);
@@ -121,6 +116,7 @@ bool IsFocused(HWND);
 bool IsCursorOverWindow(HWND);
 Point HwndGetCursorPos(HWND hwnd);
 int MapWindowPoints(HWND, HWND, Point*, int);
+void HwndScreenToClient(HWND, Point&);
 bool IsMouseOverRect(HWND hwnd, const Rect& r);
 void CenterDialog(HWND hDlg, HWND hParent = nullptr);
 char* GetDefaultPrinterNameTemp();
@@ -270,7 +266,6 @@ void DeleteCachedCursors();
 int GetMeasurementSystem();
 bool TrackMouseLeave(HWND);
 
-void TriggerRepaint(HWND);
 HINSTANCE GetInstance();
 Size ButtonGetIdealSize(HWND hwnd);
 ByteSlice LockDataResource(int id);
