@@ -7,6 +7,28 @@ struct PageRange {
     int end = INT_MAX;
 };
 
+struct FileArgs {
+    const char* origPath = nullptr;
+    const char* cleanPath = nullptr;
+
+    // page=%d
+    int pageNumber = 0;
+    // dest=%s
+    const char* destName = nullptr;
+    // search=%s
+    const char* search = nullptr;
+
+    // annotatt=%d
+    int annotAttObjNum = 0;
+
+    // attachno=%d
+    int attachmentNo = 0;
+
+    ~FileArgs();
+};
+
+FileArgs* ParseFileArgs(const char* path);
+
 struct Flags {
     StrVec fileNames;
     // pathsToBenchmark contain 2 strings per each file to benchmark:

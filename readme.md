@@ -1,4 +1,4 @@
-![](https://github.com/ftk/sumatrapdf/workflows/Build/badge.svg)
+![](https://github.com/ftk/sumatrapdf/actions/workflows/build.yml/badge.svg?branch=master)](https://github.com/sumatrapdfreader/sumatrapdf/actions/workflows/build.yml)
 
 ## SumatraCBZ
 

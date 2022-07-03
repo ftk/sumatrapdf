@@ -138,99 +138,6 @@ char* PageDestinationMupdf ::GetName() {
     return name;
 }
 
-#if 0
-Kind CalcDestKind(fz_link* link, fz_outline* outline) {
-    // outline entries with page set to -1 go nowhere
-    // see https://github.com/sumatrapdfreader/sumatrapdf/issues/1352
-    if (outline && outline->page == -1) {
-        return kindDestinationNone;
-    }
-    char* uri = PdfLinkGetURI(link, outline);
-    // some outline entries are bad (issue 1245)
-    if (!uri) {
-        return kindDestinationNone;
-    }
-    if (!IsExternalLink(uri)) {
-        float x = 0, y = 0, zoom = 0;
-        int pageNo = ResolveLink(uri, &x, &y, &zoom);
-        if (pageNo == -1) {
-            // TODO: figure out what it could be
-            logf("CalcDestKind(): unknown uri: '%s'\n", uri);
-            // ReportIf(true);
-            return nullptr;
-        }
-        return kindDestinationScrollTo;
-    }
-    if (str::StartsWith(uri, "file:")) {
-        // TODO: investigate more, happens in pier-EsugAwards2007.pdf
-        return kindDestinationLaunchFile;
-    }
-    // TODO: hackish way to detect uris of various kinds
-    // like http:, news:, mailto:, tel: etc.
-    if (str::FindChar(uri, ':') != nullptr) {
-        return kindDestinationLaunchURL;
-    }
-
-    logf("CalcDestKind(): unknown uri: '%s'\n", uri);
-    // TODO: kindDestinationLaunchEmbedded, kindDestinationLaunchURL, named destination
-    // ReportIf(true);
-    return nullptr;
-}
-
-WCHAR* CalcValue(fz_link* link, fz_outline* outline) {
-    char* uri = PdfLinkGetURI(link, outline);
-    if (!uri) {
-        return nullptr;
-    }
-    if (!IsExternalLink(uri)) {
-        // other values: #1,115,208
-        return nullptr;
-    }
-    WCHAR* path = ToWstr(uri);
-    return path;
-}
-
-WCHAR* CalcDestName(fz_link* link, fz_outline* outline) {
-    char* uri = PdfLinkGetURI(link, outline);
-    if (!uri) {
-        return nullptr;
-    }
-    if (IsExternalLink(uri)) {
-        return nullptr;
-    }
-    // TODO(port): test with more stuff
-    // figure out what PDF_NAME(GoToR) ends up being
-    return ToWstr(uri);
-}
-
-IPageDestination* NewPageDestinationMupdf(fz_link* link, fz_outline* outline) {
-    auto dest = new PageDestinationMupdf(link, outline);
-    CrashIf(!dest->kind);
-    if (dest->kind == kindDestinationScrollTo) {
-        char* uri = PdfLinkGetURI(link, outline);
-        float x = 0, y = 0, zoom = 0;
-        int pageNo = ResolveLink(uri, &x, &y, &zoom);
-        dest->pageNo = pageNo + 1;
-        dest->rect = RectF(x, y, x, y);
-        dest->value = ToWstr(uri);
-        dest->name = ToWstr(uri);
-        dest->zoom = zoom;
-    } else {
-        // TODO: clean this up
-        dest->rect = CalcDestRect(link, outline);
-        dest->value = CalcValue(link, outline);
-        dest->name = CalcDestName(link, outline);
-        dest->pageNo = CalcDestPageNo(link, outline);
-    }
-    if ((dest->pageNo <= 0) && (dest->kind != kindDestinationNone) && (dest->kind != kindDestinationLaunchFile) &&
-        (dest->kind != kindDestinationLaunchURL) && (dest->kind != kindDestinationLaunchEmbedded)) {
-        logf("dest->kind: %s, dest->pageNo: %d\n", dest->kind, dest->pageNo);
-        // ReportIf(dest->pageNo <= 0);
-    }
-    return dest;
-}
-#endif
-
 static NO_INLINE RectF FzGetRectF(fz_link* link, fz_outline* outline) {
     if (link) {
         return ToRectF(link->rect);
@@ -845,36 +752,6 @@ static LinkRectList* LinkifyText(const WCHAR* pageText, Rect* coords) {
     return list;
 }
 
-/*
-static COLORREF MkColorFromFloat(float r, float g, float b) {
-    u8 rb = (u8)(r * 255.0f);
-    u8 gb = (u8)(g * 255.0f);
-    u8 bb = (u8)(b * 255.0f);
-    return MkColor(rb, gb, bb);
-}
-
-//    n = 1 (grey), 3 (rgb) or 4 (cmyk).
-// float is in range 0...1
-static COLORREF ColorRefFromPdfFloat(fz_context* ctx, int n, float color[4]) {
-    if (n == 0) {
-        return ColorUnset;
-    }
-    if (n == 1) {
-        return MkColorFromFloat(color[0], color[0], color[0]);
-    }
-    if (n == 3) {
-        return MkColorFromFloat(color[0], color[1], color[2]);
-    }
-    if (n == 4) {
-        float rgb[4];
-        fz_convert_color(ctx, fz_device_cmyk(ctx), color, fz_device_rgb(ctx), rgb, nullptr, fz_default_color_params);
-        return MkColorFromFloat(rgb[0], rgb[1], rgb[2]);
-    }
-    CrashIf(true);
-    return 0;
-}
-*/
-
 // try to produce an 8-bit palette for saving some memory
 static RenderedBitmap* TryRenderAsPaletteImage(fz_pixmap* pixmap) {
     int w = pixmap->w;
@@ -1277,6 +1154,44 @@ pdf_obj* PdfCopyStrDict(fz_context* ctx, pdf_document* doc, pdf_obj* dict) {
 }
 
 // Note: make sure to only call with ctxAccess
+// PdfLoadAttachment && PdfLoadAttachments must traverse in the same order
+static ByteSlice PdfLoadAttachment(fz_context* ctx, pdf_document* doc, int no) {
+    pdf_obj* dict;
+    fz_var(dict);
+    ByteSlice res;
+
+    fz_try(ctx) {
+        dict = pdf_load_name_tree(ctx, doc, PDF_NAME(EmbeddedFiles));
+        if (!dict) {
+            break;
+        }
+
+        int n = pdf_dict_len(ctx, dict);
+        for (int i = 0; i < n; i++) {
+            pdf_obj* fs = pdf_dict_get_val(ctx, dict, i);
+
+            if (!pdf_is_embedded_file(ctx, fs)) {
+                continue;
+            }
+            if (no == i + 1) {
+                fz_buffer* buf = pdf_load_embedded_file_contents(ctx, fs);
+                res.d = (u8*)memdup(buf->data, buf->len);
+                res.sz = buf->len;
+                fz_drop_buffer(ctx, buf);
+                i = n + 1; // exit for loop
+            }
+        }
+    }
+    fz_always(ctx) {
+        pdf_drop_obj(ctx, dict);
+    }
+    fz_catch(ctx) {
+        logfa("PdfLoadAttachment() failed\n");
+    }
+    return res;
+}
+
+// Note: make sure to only call with ctxAccess
 static fz_outline* PdfLoadAttachments(fz_context* ctx, pdf_document* doc, const char* path) {
     fz_outline root{};
     pdf_obj* dict;
@@ -1305,7 +1220,8 @@ static fz_outline* PdfLoadAttachments(fz_context* ctx, pdf_document* doc, const 
             }
             fz_outline* link = fz_new_outline(ctx);
             link->title = fz_strdup(ctx, nameStr);
-            link->uri = fz_strdup(ctx, nameStr); // TODO: maybe make file:// ?
+            link->page.page = i + 1;
+            link->uri = fz_strdup(ctx, nameStr);
             curr->next = link;
             curr = link;
         }
@@ -1314,7 +1230,7 @@ static fz_outline* PdfLoadAttachments(fz_context* ctx, pdf_document* doc, const 
         pdf_drop_obj(ctx, dict);
     }
     fz_catch(ctx) {
-        logfa("PdfLoadAttachements() failed for '%s'\n", path);
+        logfa("PdfLoadAttachments() failed for '%s'\n", path);
     }
     return root.next;
 }
@@ -1472,17 +1388,6 @@ struct PageTreeStackItem {
         this->next_page_no = next_page_no;
     }
 };
-
-// https://github.com/sumatrapdfreader/sumatrapdf/issues/1336
-#if 0
-bool PdfLink::SaveEmbedded(LinkSaverUI& saveUI) {
-    CrashIf(!outline || !isAttachment);
-
-    ScopedCritSec scope(engine->ctxAccess);
-    // TODO: hack, we stored stream number in outline->page
-    return engine->SaveEmbedded(saveUI, outline->page);
-}
-#endif
 
 static void fz_lock_context_cs(void* user, int lock) {
     EngineMupdf* e = (EngineMupdf*)user;
@@ -2301,11 +2206,12 @@ bool EngineMupdf::FinishLoading() {
 
 static NO_INLINE IPageDestination* DestFromAttachment(EngineMupdf* engine, fz_outline* outline) {
     PageDestination* dest = new PageDestination();
-    dest->kind = kindDestinationLaunchEmbedded;
+    dest->kind = kindDestinationAttachment;
     // WCHAR* path = ToWstr(outline->uri);
     dest->name = str::Dup(outline->title);
     // page is really a stream number
-    dest->value = str::Format("%s:%d", engine->FilePath(), outline->page);
+    dest->value = str::Format("%s:%d", engine->FilePath(), outline->page.page);
+    dest->pageNo = outline->page.page;
     return dest;
 }
 
@@ -2342,7 +2248,7 @@ TocItem* EngineMupdf::BuildTocTree(TocItem* parent, fz_outline* outline, int& id
         item->id = ++idCounter;
         item->fontFlags = 0; // TODO: had outline->flags; but mupdf changed outline
         item->pageNo = pageNo;
-        CrashIf(!item->PageNumbersMatch());
+        ReportIf(!isAttachment && !item->PageNumbersMatch());
 
         // TODO: had outline->n_color and outline->color but mupdf changed outline
         /*
@@ -2520,7 +2426,8 @@ static void MakePageElementCommentsFromAnnotations(fz_context* ctx, FzPageInfo* 
             logf("found file attachment annotation\n");
 
             pdf_embedded_file_params fileParams = {};
-            pdf_obj* fs = pdf_annot_obj(ctx, annot);
+            pdf_obj* fs = pdf_annot_filespec(ctx, annot);
+            int num = pdf_to_num(ctx, pdf_annot_obj(ctx, annot));
             pdf_get_embedded_file_params(ctx, fs, &fileParams);
             const char* attname = fileParams.filename;
             fz_rect rect = pdf_annot_rect(ctx, annot);
@@ -2528,9 +2435,10 @@ static void MakePageElementCommentsFromAnnotations(fz_context* ctx, FzPageInfo* 
                 continue;
             }
 
-            logf("attachement: %s\n", attname);
+            logf("attachment: %s, num: %d\n", attname, num);
 
             auto dest = new PageDestination();
+            // TODO: kindDestinationAttachment ?
             dest->kind = kindDestinationLaunchEmbedded;
             dest->value = str::Dup(attname);
 
@@ -2905,7 +2813,18 @@ fz_matrix EngineMupdf::viewctm(int pageNo, float zoom, int rotation) {
 }
 
 fz_matrix EngineMupdf::viewctm(fz_page* page, float zoom, int rotation) const {
-    return FzCreateViewCtm(fz_bound_page(ctx, page), zoom, rotation);
+    fz_rect bounds;
+    fz_var(bounds);
+    fz_try(ctx) {
+        bounds = fz_bound_page(ctx, page);
+    }
+    fz_catch(ctx) {
+        bounds = {};
+    }
+    if (fz_is_empty_rect(bounds)) {
+        bounds = {0, 0, 612, 792};
+    }
+    return FzCreateViewCtm(bounds, zoom, rotation);
 }
 
 RenderedBitmap* EngineMupdf::GetPageImage(int pageNo, RectF rect, int imageIdx) {
@@ -3369,27 +3288,6 @@ bool EngineMupdfSaveUpdated(EngineBase* engine, const char* path, std::function<
     return ok;
 }
 
-// https://github.com/sumatrapdfreader/sumatrapdf/issues/1336
-#if 0
-bool EngineMupdf::SaveEmbedded(LinkSaverUI& saveUI, int num) {
-    ScopedCritSec scope(ctxAccess);
-
-    fz_buffer* buf = nullptr;
-    fz_try(ctx) {
-        buf = pdf_load_stream_number(ctx, doc, num);
-    }
-    fz_catch(ctx) {
-        return false;
-    }
-    CrashIf(nullptr == buf);
-    u8* data = nullptr;
-    size_t dataLen = fz_buffer_extract(ctx, buf, &data);
-    bool result = saveUI.SaveEmbedded(data, dataLen);
-    fz_drop_buffer(ctx, buf);
-    return result;
-}
-#endif
-
 bool EngineMupdf::HasClipOptimizations(int pageNo) {
     if (!pdfdoc) {
         return false;
@@ -3545,6 +3443,16 @@ EngineBase* CreateEngineMupdfFromStream(IStream* stream, const char* nameHint, P
     return engine;
 }
 
+EngineBase* CreateEngineMupdfFromData(const ByteSlice& data, const char* nameHint, PasswordUI* pwdUI) {
+    EngineMupdf* engine = new EngineMupdf();
+    IStream* stream = CreateStreamFromData(data);
+    if (!engine->Load(stream, nameHint, pwdUI)) {
+        delete engine;
+        return nullptr;
+    }
+    return engine;
+}
+
 int EngineMupdfGetAnnotations(EngineBase* engine, Vec<Annotation*>* annotsOut) {
     EngineMupdf* epdf = AsEngineMupdf(engine);
     return epdf->GetAnnotations(annotsOut);
@@ -3580,6 +3488,17 @@ static bool IsAllowedAnnot(AnnotationType tp, AnnotationType* allowed) {
         ++i;
     }
     return false;
+}
+
+// caller must free
+ByteSlice EngineMupdfLoadAttachment(EngineBase* engine, int attachmentNo) {
+    EngineMupdf* epdf = AsEngineMupdf(engine);
+    if (!epdf->pdfdoc) {
+        return {};
+    }
+
+    ByteSlice res = PdfLoadAttachment(epdf->ctx, epdf->pdfdoc, attachmentNo);
+    return res;
 }
 
 // caller must delete

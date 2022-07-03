@@ -131,11 +131,12 @@ void SelectTabInWindow(WindowTab*);
 
 class EngineBase;
 struct DocController;
+struct FileArgs;
 
 // LoadDocument carries a lot of state, this holds them in one place
 struct LoadArgs {
-    explicit LoadArgs(const char* fileName, MainWindow* win);
-    ~LoadArgs() = default;
+    explicit LoadArgs(const char* origPath, MainWindow* win);
+    ~LoadArgs();
 
     const char* FilePath() const;
     void SetFilePath(const char* path);
@@ -160,13 +161,20 @@ struct LoadArgs {
 
     DocController* ctrl = nullptr;
 
+    FileArgs* fileArgs = nullptr;
+
   private:
     AutoFreeStr fileName;
 };
 
+struct PasswordUI;
+
 MainWindow* LoadDocument(LoadArgs* args, bool lazyload = false);
+MainWindow* LoadDocumentFinish(LoadArgs* args, bool lazyload);
 void LoadDocumentAsync(LoadArgs* args);
 MainWindow* CreateAndShowMainWindow(SessionData* data = nullptr);
+DocController* CreateControllerForEngineOrFile(EngineBase* engine, const char* path, PasswordUI* pwdUI,
+                                               MainWindow* win);
 
 uint MbRtlReadingMaybe();
 void MessageBoxWarning(HWND hwnd, const WCHAR* msg, const WCHAR* title = nullptr);

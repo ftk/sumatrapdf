@@ -148,10 +148,23 @@ static void CloseDocumentInCurrentTab(MainWindow*, bool keepUIEnabled = false, b
 static void OnSidebarSplitterMove(SplitterMoveEvent*);
 static void OnFavSplitterMove(SplitterMoveEvent*);
 
-LoadArgs::LoadArgs(const char* fileName, MainWindow* win) {
-    char* path = path::NormalizeTemp(fileName);
+LoadArgs::LoadArgs(const char* origPath, MainWindow* win) {
+    this->fileArgs = ParseFileArgs(origPath);
+    const char* cleanPath = origPath;
+    if (fileArgs) {
+        cleanPath = fileArgs->cleanPath;
+        logf("LoadArgs: origPath='%s', cleanPath='%s'\n", origPath, cleanPath);
+    }
+    char* path = path::NormalizeTemp(cleanPath);
+    if (!str::EqI(path, cleanPath)) {
+        logf("LoadArgs: cleanPath='%s', path='%s'\n", cleanPath, path);
+    }
     this->fileName.SetCopy(path);
     this->win = win;
+}
+
+LoadArgs::~LoadArgs() {
+    delete fileArgs;
 }
 
 const char* LoadArgs::FilePath() const {
@@ -916,7 +929,7 @@ static DocController* CreateControllerForChm(const char* path, PasswordUI* pwdUI
     DocController* ctrl = nullptr;
     if (!chmModel->SetParentHwnd(win->hwndCanvas)) {
         delete chmModel;
-        EngineBase* engine = CreateEngine(path, pwdUI, true);
+        EngineBase* engine = CreateEngineFromFile(path, pwdUI, true);
         if (!engine) {
             return nullptr;
         }
@@ -934,8 +947,8 @@ static DocController* CreateControllerForChm(const char* path, PasswordUI* pwdUI
     return ctrl;
 }
 
-static DocController* CreateControllerForEngineOrFile(EngineBase* engine, const char* path, PasswordUI* pwdUI,
-                                                      MainWindow* win) {
+DocController* CreateControllerForEngineOrFile(EngineBase* engine, const char* path, PasswordUI* pwdUI,
+                                               MainWindow* win) {
     // TODO: move this to MainWindow constructor
     if (!win->cbHandler) {
         win->cbHandler = new ControllerCallbackHandler(win);
@@ -944,7 +957,7 @@ static DocController* CreateControllerForEngineOrFile(EngineBase* engine, const 
     bool chmInFixedUI = gGlobalPrefs->chmUI.useFixedPageUI;
     // TODO: sniff file content only once
     if (!engine) {
-        engine = CreateEngine(path, pwdUI, chmInFixedUI);
+        engine = CreateEngineFromFile(path, pwdUI, chmInFixedUI);
     }
     if (engine) {
         int nPages = engine ? engine->PageCount() : 0;
@@ -1635,7 +1648,7 @@ static void ShowErrorLoading(MainWindow* win, const char* path, bool noSavePrefs
     LoadDocumentMarkNotExist(win, path, noSavePrefs);
 }
 
-static MainWindow* LoadDocumentFinish(LoadArgs* args, bool lazyload) {
+MainWindow* LoadDocumentFinish(LoadArgs* args, bool lazyload) {
     MainWindow* win = args->win;
     const char* fullPath = args->FilePath();
 
@@ -3477,18 +3490,18 @@ static void OnMenuViewShowHideScrollbars() {
     UpdateFixedPageScrollbarsVisibility();
 }
 
-static void OnMenuAdvancedOptions() {
+static void OpenAdvancedOptions() {
     if (!HasPermission(Perm::DiskAccess) || !HasPermission(Perm::SavePreferences)) {
         return;
     }
 
-    char* path = GetSettingsPathTemp();
     // TODO: disable/hide the menu item when there's no prefs file
     //       (happens e.g. when run in portable mode from a CD)?
-    LaunchFile(path, nullptr, "open");
+    char* path = GetSettingsPathTemp();
+    OpenFileWithTextEditor(path);
 }
 
-static void OnMenuOptions(HWND hwnd) {
+static void ShowOptionsDialog(HWND hwnd) {
     if (!HasPermission(Perm::SavePreferences)) {
         return;
     }
@@ -3510,8 +3523,8 @@ static void OnMenuOptions(HWND hwnd) {
     SaveSettings();
 }
 
-static void OnMenuOptions(MainWindow* win) {
-    OnMenuOptions(win->hwndFrame);
+static void ShowOptionsDialog(MainWindow* win) {
+    ShowOptionsDialog(win->hwndFrame);
     if (!gWindows.empty() && gWindows.at(0)->IsAboutWindow()) {
         gWindows.at(0)->RedrawAll(true);
     }
@@ -5073,7 +5086,7 @@ static LRESULT FrameOnCommand(MainWindow* win, HWND hwnd, UINT msg, WPARAM wp, L
             break;
 
         case CmdHelpAbout:
-            OnMenuAbout(win);
+            ShowAboutWindow(win);
             break;
 
         case CmdCheckUpdate:
@@ -5081,11 +5094,11 @@ static LRESULT FrameOnCommand(MainWindow* win, HWND hwnd, UINT msg, WPARAM wp, L
             break;
 
         case CmdOptions:
-            OnMenuOptions(win);
+            ShowOptionsDialog(win);
             break;
 
         case CmdAdvancedOptions:
-            OnMenuAdvancedOptions();
+            OpenAdvancedOptions();
             break;
 
         case CmdSendByEmail:
