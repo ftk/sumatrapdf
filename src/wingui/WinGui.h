@@ -224,6 +224,8 @@ struct Tooltip : Wnd {
 
     int Count();
 
+    TempStr GetTextTemp(int id = 0);
+
     void SetDelayTime(int type, int timeInMs);
     void SetMaxWidth(int dx);
 
@@ -683,7 +685,7 @@ using TabDraggedHandler = std::function<void(TabDraggedEvent*)>;
 struct TabsCreateArgs {
     HWND parent = nullptr;
     HFONT font = nullptr;
-    bool witToolTips = false;
+    bool withToolTips = false;
     int ctrlID = 0;
     int tabDefaultDx = 300;
 };
@@ -698,14 +700,16 @@ struct TabInfo {
     ~TabInfo();
 
     // for internal use
-    Rect pos;
-    Rect closePos;
+    Rect r;
+    Rect rClose;
+    Size titleSize;
+    Point titlePos;
+
 };
 
 struct TabsCtrl : Wnd {
     int ctrlID = 0;
-    bool witToolTips = false;
-    AutoFreeStr currTooltipText;
+    bool withToolTips = false;
     bool inTitleBar = false;
     // dx of tab if there's more space available
     int tabDefaultDx = 300;
@@ -742,7 +746,6 @@ struct TabsCtrl : Wnd {
     COLORREF tabClickedCloseX = 0;
     COLORREF tabClickedCloseCircle = 0;
 
-    PathData* data = nullptr;
     Size tabSize{-1, -1};
 
     TabsCtrl();

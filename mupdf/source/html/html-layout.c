@@ -368,7 +368,7 @@ static float measure_line(fz_html_flow *node, fz_html_flow *end, float *baseline
 			if (node->h > max_a)
 				max_a = node->h;
 		}
-		else
+		else if (node->type != FLOW_SBREAK && node->type != FLOW_BREAK)
 		{
 			float a = node->box->em * 0.8f;
 			float d = node->box->em * 0.2f;
@@ -539,6 +539,8 @@ static int flush_line(fz_context *ctx, fz_html_box *box, float page_h, float pag
 	if (page_h > 0)
 	{
 		avail = page_h - fmodf(box->b, page_h);
+		/* If the line is larger than the available space skip to the start
+		 * of the next page. */
 		if (line_h > avail)
 		{
 			if (restart)
@@ -964,10 +966,9 @@ static float layout_block(fz_context *ctx, fz_html_box *box, float em, float top
 			vertical = margin[T];
 		}
 
-		/* If we have a border, then in the event that no content fits, we want to
-		 * restart with us, not with the content that doesn't fit. */
-		if (restart->potential == NULL &&
-			(border[T] != 0 || border[R] != 0 || border[B] != 0 || border[L] != 0))
+		/* In the event that no content fits, we want to restart with us, not with the
+		 * content that doesn't fit. */
+		if (restart->potential == NULL)
 			restart->potential = box;
 	}
 
@@ -1010,7 +1011,19 @@ static float layout_block(fz_context *ctx, fz_html_box *box, float em, float top
 	else
 	{
 		/* We're not skipping, so add in the spacings to the top edge of our box. */
-		box->y += margin[T] + border[T] + padding[T];
+		box->y = advance_for_spacing(box->y, margin[T] + border[T] + padding[T], page_h, &eop);
+		if (eop)
+		{
+			box->b = box->y;
+			if (restart && restart->end == NULL)
+			{
+				if (restart->potential)
+					restart->end = restart->potential;
+				else
+					restart->end = box;
+				return 0;
+			}
+		}
 	}
 	/* Start with our content being zero height. */
 	box->b = box->y;
@@ -1795,12 +1808,19 @@ void fz_draw_story(fz_context *ctx, fz_html_story *story, fz_device *dev, fz_mat
 	page_bot = b->b + b->margin[B] + b->border[B] + b->padding[B];
 
 	clip = fz_new_path(ctx);
+	fz_try(ctx)
+	{
 	fz_moveto(ctx, clip, bbox.x0, bbox.y0);
 	fz_lineto(ctx, clip, bbox.x1, bbox.y0);
 	fz_lineto(ctx, clip, bbox.x1, bbox.y1);
 	fz_lineto(ctx, clip, bbox.x0, bbox.y1);
 	fz_closepath(ctx, clip);
 	fz_clip_path(ctx, dev, clip, 0, ctm, bbox);
+	}
+	fz_always(ctx)
+		fz_drop_path(ctx, clip);
+	fz_catch(ctx)
+		fz_rethrow(ctx);
 
 	story->restart_place = story->restart_draw;
 	fz_draw_restarted_html(ctx, dev, ctm, story->tree.root->down, 0, page_bot+page_top, &story->restart_place);
