@@ -1587,7 +1587,7 @@ static void scheduleReloadTab(WindowTab* tab) {
     });
 }
 
-// return true if adjustd path 
+// return true if adjustd path
 static bool AdjustPathForMaybeMovedFile(LoadArgs* args) {
     const char* path = args->FilePath();
     if (DocumentPathExists(path)) {
@@ -3275,6 +3275,8 @@ void OpenNextPrevFileInFolder(MainWindow* win, bool forward) {
     }
 
     WindowTab* tab = win->CurrentTab();
+    auto display_mode = tab->ctrl ? tab->ctrl->GetDisplayMode() : DisplayMode::Automatic;
+    auto zoom = tab->ctrl ? tab->ctrl->GetZoomVirtual() : kZoomFitContent;
     char* path = tab->filePath;
     StrVec files = CollectNextPrevFilesIfChanged(path);
     if (files.Size() < 2) {
@@ -3297,6 +3299,11 @@ void OpenNextPrevFileInFolder(MainWindow* win, bool forward) {
     LoadArgs args(path, win);
     args.forceReuse = true;
     LoadDocument(&args);
+    if(args.ctrl)
+    {
+        args.ctrl->SetDisplayMode(display_mode);
+        args.ctrl->SetZoomVirtual(zoom, nullptr);
+    }
 }
 
 constexpr int kSplitterDx = 5;
