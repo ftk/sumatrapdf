@@ -360,7 +360,7 @@ WindowTab* CreateNewTab(MainWindow* win, const char* filePath) {
     auto tabs = win->tabsCtrl;
     int idx = win->TabsCount();
     bool useTabs = gGlobalPrefs->useTabs;
-    bool noHomeTab = gGlobalPrefs->noHomeTab;
+    bool noHomeTab = true;
     bool createHomeTab = useTabs && !noHomeTab && (idx == 0);
     if (createHomeTab) {
         WindowTab* tab = new WindowTab(win);
