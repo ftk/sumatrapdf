@@ -475,16 +475,15 @@ Error:
     goto Retry;
 }
 
-static HACCEL* gAccTable;
-static HACCEL* gSafeAccTable;
-
 static HACCEL FindAcceleratorsForHwnd(HWND hwnd, HWND* hwndAccel) {
-    CrashIf(!gAccTable || !*gAccTable);
-    CrashIf(!gSafeAccTable || !*gSafeAccTable);
+    HACCEL* accTables = GetAcceleratorTables();
 
+    HACCEL accTable = accTables[0];
+    HACCEL editAccTable = accTables[1];
+    HACCEL treeViewAccTable = accTables[2];
     if (FindPropertyWindowByHwnd(hwnd)) {
         *hwndAccel = hwnd;
-        return *gSafeAccTable;
+        return editAccTable;
     }
 
     MainWindow* win = FindMainWindowByHwnd(hwnd);
@@ -493,24 +492,27 @@ static HACCEL FindAcceleratorsForHwnd(HWND hwnd, HWND* hwndAccel) {
     }
     if (hwnd == win->hwndFrame || hwnd == win->hwndCanvas) {
         *hwndAccel = win->hwndFrame;
-        return *gAccTable;
+        return accTable;
     }
     WCHAR clsName[256];
     int n = GetClassNameW(hwnd, clsName, dimof(clsName));
     if (n == 0) {
         return nullptr;
     }
-    if (str::Eq(clsName, WC_EDITW) || str::Eq(clsName, WC_TREEVIEWW)) {
+    if (str::EqI(clsName, WC_EDITW)) {
         *hwndAccel = win->hwndFrame;
-        return *gSafeAccTable;
+        return editAccTable;
     }
+
+    if (str::EqI(clsName, WC_TREEVIEWW)) {
+        *hwndAccel = win->hwndFrame;
+        return treeViewAccTable;
+    }
+
     return nullptr;
 }
 
 static int RunMessageLoop() {
-    gAccTable = CreateSumatraAcceleratorTable();
-    gSafeAccTable = GetSafeAcceleratorTable();
-
     MSG msg;
     HACCEL accels;
     HWND hwndDialog;
@@ -977,7 +979,7 @@ int APIENTRY WinMain(HINSTANCE hInstance, __unused HINSTANCE hPrevInstance, __un
     }
 
     // call before creating first window and menu. Otherwise menu shortcuts will be missing
-    CreateSumatraAcceleratorTable();
+    GetAcceleratorTables();
 
     if (flags.dde) {
         logf("sending flags.dde '%s', hwnd: 0x%p\n", flags.dde, existingHwnd);
@@ -1176,6 +1178,8 @@ Exit:
     mui::Destroy();
     uitask::Destroy();
     trans::Destroy();
+
+    FreeAcceleratorTables();
 
     FileWatcherWaitForShutdown();
 

@@ -1560,7 +1560,11 @@ void Tooltip::Update(int id, const char* s, const Rect& rc, bool multiline) {
 
 // this assumes we only have at most one tool per this tooltip
 int Tooltip::SetSingle(const char* s, const Rect& rc, bool multiline) {
-    WCHAR* ws = ToWstrTemp(s);
+    if (str::Len(s) > 256) {
+        // pathological cases make for tooltips that take too long to display
+        // https://github.com/sumatrapdfreader/sumatrapdf/issues/2814
+        s = str::JoinTemp(str::DupTemp(s, 256), "...");
+    }
     int n = Count();
     // if want to use more tooltips, use Add() and Update()
     ReportIf(n > 1);
@@ -3285,25 +3289,21 @@ void TabsCtrl::Layout() {
     int dy = rect.dy;
     int nTabs = GetTabCount();
     if (nTabs == 0) {
-        //logfa("TabsCtrl::Layout size: (%d, %d), no tabs\n", rect.dx, rect.dy);
+        // logfa("TabsCtrl::Layout size: (%d, %d), no tabs\n", rect.dx, rect.dy);
         HwndScheduleRepaint(hwnd);
         return;
     }
     auto maxDx = (rect.dx - 5) / nTabs;
     int dx = std::min(tabDefaultDx, maxDx);
-    dx--;
-    if (tabSize.dx == dx && tabSize.dy == dy) {
-        return;
-    }
     tabSize = {dx, dy};
-    //logfa("TabsCtrl::Layout size: (%d, %d), tab size: (%d, %d)\n", rect.dx, rect.dy, tabSize.dx, tabSize.dy);
+    // logfa("TabsCtrl::Layout size: (%d, %d), tab size: (%d, %d)\n", rect.dx, rect.dy, tabSize.dx, tabSize.dy);
 
     HwndTabsSetItemSize(hwnd, tabSize);
 
     int closeDy = DpiScale(hwnd, 8);
     int closeDx = closeDy;
     int closeY = (dy - closeDy) / 2;
-    //logfa("  closeDx: %d, closeDy: %d\n", closeDx, closeDy);
+    // logfa("  closeDx: %d, closeDy: %d\n", closeDx, closeDy);
 
     HFONT hfont = GetFont();
     int x = 0;
@@ -3316,7 +3316,7 @@ void TabsCtrl::Layout() {
         ti->rClose = {xEnd - closeDx - 8, closeY, closeDx, closeDy};
         ti->titleSize = HwndMeasureText(hwnd, ti->text, hfont);
         int y = (dy - ti->titleSize.dy) / 2;
-        //logfa("  ti->titleSize.dy: %d\n", ti->titleSize.dy);
+        // logfa("  ti->titleSize.dy: %d\n", ti->titleSize.dy);
         if (y < 0) {
             y = 0;
         }
@@ -3379,7 +3379,8 @@ void TabsCtrl::Paint(HDC hdc, RECT& rc) {
     int tabUnderMouse = tabState.tabIdx;
     bool overClose = tabState.overClose;
     int tabSelected = GetSelected();
-    //logfa("TabsCtrl::Paint, underMouse: %d, overClose: %d, selected: %d, rc: pos: (%d, %d), size: (%d, %d)\n", tabUnderMouse, (int)overClose, tabSelected, rc.left, rc.top, RectDx(rc), RectDy(rc));
+    // logfa("TabsCtrl::Paint, underMouse: %d, overClose: %d, selected: %d, rc: pos: (%d, %d), size: (%d, %d)\n",
+    // tabUnderMouse, (int)overClose, tabSelected, rc.left, rc.top, RectDx(rc), RectDy(rc));
 
     bool isTranslucentMode = inTitleBar && dwm::IsCompositionEnabled();
     if (isTranslucentMode) {
@@ -3415,7 +3416,7 @@ void TabsCtrl::Paint(HDC hdc, RECT& rc) {
         COLORREF bgCol = tabBackgroundBg;
         COLORREF textCol = tabBackgroundText;
         COLORREF circleColor = tabBackgroundCloseCircle;
-        COLORREF xColor = RGB(0,0,0);
+        COLORREF xColor = RGB(0, 0, 0);
 
         if (tabSelected == i) {
             bgCol = tabSelectedBg;
@@ -3432,7 +3433,7 @@ void TabsCtrl::Paint(HDC hdc, RECT& rc) {
         }
 
         ti = GetTab(i);
-        //logfa("rClose: pos: (%d, %d) size: (%d, %d)\n", r.x, r.y, r.dx, r.dy);
+        // logfa("rClose: pos: (%d, %d) size: (%d, %d)\n", r.x, r.y, r.dx, r.dy);
 
         gfx.SetCompositingMode(Gdiplus::CompositingModeSourceCopy);
 
@@ -3455,7 +3456,7 @@ void TabsCtrl::Paint(HDC hdc, RECT& rc) {
         br.SetColor(GdipCol(xColor));
         Pen penX(&br, 1.f);
         Gdiplus::Point p1(r.x, r.y);
-        Gdiplus::Point p2(r.x+r.dx, r.y+r.dy);
+        Gdiplus::Point p2(r.x + r.dx, r.y + r.dy);
         gfx.DrawLine(&penX, p1, p2);
         p1 = {r.x + r.dx, r.y};
         p2 = {r.x, r.y + r.dy};
@@ -3606,12 +3607,13 @@ LRESULT TabsCtrl::WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
             break;
 
         case WM_MOUSELEAVE:
-            //logfa("TabsCtrl::WndProc: WM_MOUSELEAVE\n");
+            // logfa("TabsCtrl::WndProc: WM_MOUSELEAVE\n");
             [[fallthrough]];
 
         case WM_MOUSEMOVE: {
             bool isDragging = (GetCapture() == hwnd);
-            //logfa("TabsCtrl::WndProc: WM_MOUSEMOVE, tabUnderMouse: %d, isDragging: %d\n", tabUnderMouse, (int)isDragging);
+            // logfa("TabsCtrl::WndProc: WM_MOUSEMOVE, tabUnderMouse: %d, isDragging: %d\n", tabUnderMouse,
+            // (int)isDragging);
             int hl = tabUnderMouse;
             bool didChangeTabs = false;
             if (isDragging && hl == -1) {

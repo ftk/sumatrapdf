@@ -297,6 +297,9 @@
     <ClInclude Include="..\ext\openjpeg\src\lib\openjp2\t1.h">
       <Filter>openjpeg\src\lib\openjp2</Filter>
     </ClInclude>
+    <ClInclude Include="..\ext\openjpeg\src\lib\openjp2\t1_ht_luts.h">
+      <Filter>openjpeg\src\lib\openjp2</Filter>
+    </ClInclude>
     <ClInclude Include="..\ext\openjpeg\src\lib\openjp2\t1_luts.h">
       <Filter>openjpeg\src\lib\openjp2</Filter>
     </ClInclude>
@@ -387,6 +390,9 @@
       <Filter>freetype\src\base</Filter>
     </ClCompile>
     <ClCompile Include="..\ext\freetype\src\base\ftdebug.c">
+      <Filter>freetype\src\base</Filter>
+    </ClCompile>
+    <ClCompile Include="..\ext\freetype\src\base\ftfstype.c">
       <Filter>freetype\src\base</Filter>
     </ClCompile>
     <ClCompile Include="..\ext\freetype\src\base\ftgasp.c">
@@ -548,42 +554,6 @@
     <ClCompile Include="..\ext\harfbuzz\src\hb-ot-name.cc">
       <Filter>harfbuzz\src</Filter>
     </ClCompile>
-    <ClCompile Include="..\ext\harfbuzz\src\hb-ot-shape-complex-arabic.cc">
-      <Filter>harfbuzz\src</Filter>
-    </ClCompile>
-    <ClCompile Include="..\ext\harfbuzz\src\hb-ot-shape-complex-default.cc">
-      <Filter>harfbuzz\src</Filter>
-    </ClCompile>
-    <ClCompile Include="..\ext\harfbuzz\src\hb-ot-shape-complex-hangul.cc">
-      <Filter>harfbuzz\src</Filter>
-    </ClCompile>
-    <ClCompile Include="..\ext\harfbuzz\src\hb-ot-shape-complex-hebrew.cc">
-      <Filter>harfbuzz\src</Filter>
-    </ClCompile>
-    <ClCompile Include="..\ext\harfbuzz\src\hb-ot-shape-complex-indic-table.cc">
-      <Filter>harfbuzz\src</Filter>
-    </ClCompile>
-    <ClCompile Include="..\ext\harfbuzz\src\hb-ot-shape-complex-indic.cc">
-      <Filter>harfbuzz\src</Filter>
-    </ClCompile>
-    <ClCompile Include="..\ext\harfbuzz\src\hb-ot-shape-complex-khmer.cc">
-      <Filter>harfbuzz\src</Filter>
-    </ClCompile>
-    <ClCompile Include="..\ext\harfbuzz\src\hb-ot-shape-complex-myanmar.cc">
-      <Filter>harfbuzz\src</Filter>
-    </ClCompile>
-    <ClCompile Include="..\ext\harfbuzz\src\hb-ot-shape-complex-syllabic.cc">
-      <Filter>harfbuzz\src</Filter>
-    </ClCompile>
-    <ClCompile Include="..\ext\harfbuzz\src\hb-ot-shape-complex-thai.cc">
-      <Filter>harfbuzz\src</Filter>
-    </ClCompile>
-    <ClCompile Include="..\ext\harfbuzz\src\hb-ot-shape-complex-use.cc">
-      <Filter>harfbuzz\src</Filter>
-    </ClCompile>
-    <ClCompile Include="..\ext\harfbuzz\src\hb-ot-shape-complex-vowel-constraints.cc">
-      <Filter>harfbuzz\src</Filter>
-    </ClCompile>
     <ClCompile Include="..\ext\harfbuzz\src\hb-ot-shape-fallback.cc">
       <Filter>harfbuzz\src</Filter>
     </ClCompile>
@@ -591,6 +561,42 @@
       <Filter>harfbuzz\src</Filter>
     </ClCompile>
     <ClCompile Include="..\ext\harfbuzz\src\hb-ot-shape.cc">
+      <Filter>harfbuzz\src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\ext\harfbuzz\src\hb-ot-shaper-arabic.cc">
+      <Filter>harfbuzz\src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\ext\harfbuzz\src\hb-ot-shaper-default.cc">
+      <Filter>harfbuzz\src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\ext\harfbuzz\src\hb-ot-shaper-hangul.cc">
+      <Filter>harfbuzz\src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\ext\harfbuzz\src\hb-ot-shaper-hebrew.cc">
+      <Filter>harfbuzz\src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\ext\harfbuzz\src\hb-ot-shaper-indic-table.cc">
+      <Filter>harfbuzz\src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\ext\harfbuzz\src\hb-ot-shaper-indic.cc">
+      <Filter>harfbuzz\src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\ext\harfbuzz\src\hb-ot-shaper-khmer.cc">
+      <Filter>harfbuzz\src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\ext\harfbuzz\src\hb-ot-shaper-myanmar.cc">
+      <Filter>harfbuzz\src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\ext\harfbuzz\src\hb-ot-shaper-syllabic.cc">
+      <Filter>harfbuzz\src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\ext\harfbuzz\src\hb-ot-shaper-thai.cc">
+      <Filter>harfbuzz\src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\ext\harfbuzz\src\hb-ot-shaper-use.cc">
+      <Filter>harfbuzz\src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\ext\harfbuzz\src\hb-ot-shaper-vowel-constraints.cc">
       <Filter>harfbuzz\src</Filter>
     </ClCompile>
     <ClCompile Include="..\ext\harfbuzz\src\hb-ot-tag.cc">
@@ -885,6 +891,9 @@
       <Filter>openjpeg\src\lib\openjp2</Filter>
     </ClCompile>
     <ClCompile Include="..\ext\openjpeg\src\lib\openjp2\function_list.c">
+      <Filter>openjpeg\src\lib\openjp2</Filter>
+    </ClCompile>
+    <ClCompile Include="..\ext\openjpeg\src\lib\openjp2\ht_dec.c">
       <Filter>openjpeg\src\lib\openjp2</Filter>
     </ClCompile>
     <ClCompile Include="..\ext\openjpeg\src\lib\openjp2\image.c">

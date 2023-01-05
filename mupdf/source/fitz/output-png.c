@@ -236,6 +236,12 @@ png_write_band(fz_context *ctx, fz_band_writer *writer_, int stride, int band_st
 		if (usize > SIZE_MAX / band_height)
 			fz_throw(ctx, FZ_ERROR_GENERIC, "png data too large.");
 		usize *= band_height;
+		writer->stream.opaque = ctx;
+		writer->stream.zalloc = fz_zlib_alloc;
+		writer->stream.zfree = fz_zlib_free;
+		err = deflateInit(&writer->stream, Z_DEFAULT_COMPRESSION);
+		if (err != Z_OK)
+			fz_throw(ctx, FZ_ERROR_GENERIC, "compression error %d", err);
 		writer->usize = usize;
 		/* Now figure out how large a buffer we need to compress into.
 		 * deflateBound always expands a bit, and it's limited by being
@@ -245,12 +251,6 @@ png_write_band(fz_context *ctx, fz_band_writer *writer_, int stride, int band_st
 			writer->csize = UINT32_MAX;
 		writer->udata = Memento_label(fz_malloc(ctx, writer->usize), "png_write_udata");
 		writer->cdata = Memento_label(fz_malloc(ctx, writer->csize), "png_write_cdata");
-		writer->stream.opaque = ctx;
-		writer->stream.zalloc = fz_zlib_alloc;
-		writer->stream.zfree = fz_zlib_free;
-		err = deflateInit(&writer->stream, Z_DEFAULT_COMPRESSION);
-		if (err != Z_OK)
-			fz_throw(ctx, FZ_ERROR_GENERIC, "compression error %d", err);
 	}
 
 	dp = writer->udata;
@@ -260,24 +260,13 @@ png_write_band(fz_context *ctx, fz_band_writer *writer_, int stride, int band_st
 		/* Unpremultiply data */
 		for (y = 0; y < band_height; y++)
 		{
-			int prev[FZ_MAX_COLORS];
-			*dp++ = 1; /* sub prediction filter */
+			*dp++ = 0; /* none prediction filter */
 			for (x = 0; x < w; x++)
 			{
 				int a = sp[n-1];
 				int inva = a ? 256*255/a : 0;
-				int p;
 				for (k = 0; k < n-1; k++)
-				{
-					int v = (sp[k] * inva + 128)>>8;
-					p = x ? prev[k] : 0;
-					prev[k] = v;
-					v -= p;
-					dp[k] = v;
-				}
-				p = x ? prev[k] : 0;
-				prev[k] = a;
-				a -= p;
+					dp[k] = (sp[k] * inva + 128)>>8;
 				dp[k] = a;
 				sp += n;
 				dp += n;
@@ -289,16 +278,11 @@ png_write_band(fz_context *ctx, fz_band_writer *writer_, int stride, int band_st
 	{
 		for (y = 0; y < band_height; y++)
 		{
-			*dp++ = 1; /* sub prediction filter */
+			*dp++ = 0; /* none prediction filter */
 			for (x = 0; x < w; x++)
 			{
 				for (k = 0; k < n; k++)
-				{
-					if (x == 0)
 						dp[k] = sp[k];
-					else
-						dp[k] = sp[k] - sp[k-n];
-				}
 				sp += n;
 				dp += n;
 			}
@@ -320,7 +304,7 @@ png_write_band(fz_context *ctx, fz_band_writer *writer_, int stride, int band_st
 
 		err = deflate(&writer->stream, (finalband && remain == writer->stream.avail_in) ? Z_FINISH : Z_NO_FLUSH);
 		if (err != Z_OK && err != Z_STREAM_END)
-				fz_throw(ctx, FZ_ERROR_GENERIC, "compression error %d", err);
+			fz_throw(ctx, FZ_ERROR_GENERIC, "compression error %d", err);
 
 		/* We are guaranteed that writer->stream.next_in will have been updated for the
 		 * data that has been eaten. */

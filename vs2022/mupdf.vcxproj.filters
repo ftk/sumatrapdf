@@ -153,6 +153,9 @@
     <ClInclude Include="..\mupdf\include\mupdf\fitz\store.h">
       <Filter>mupdf\include\mupdf\fitz</Filter>
     </ClInclude>
+    <ClInclude Include="..\mupdf\include\mupdf\fitz\story-writer.h">
+      <Filter>mupdf\include\mupdf\fitz</Filter>
+    </ClInclude>
     <ClInclude Include="..\mupdf\include\mupdf\fitz\story.h">
       <Filter>mupdf\include\mupdf\fitz</Filter>
     </ClInclude>
@@ -279,6 +282,9 @@
     <ClInclude Include="..\mupdf\source\fitz\encodings.h">
       <Filter>mupdf\source\fitz</Filter>
     </ClInclude>
+    <ClInclude Include="..\mupdf\source\fitz\font-table.h">
+      <Filter>mupdf\source\fitz</Filter>
+    </ClInclude>
     <ClInclude Include="..\mupdf\source\fitz\glyph-imp.h">
       <Filter>mupdf\source\fitz</Filter>
     </ClInclude>
@@ -320,6 +326,12 @@
     </ClInclude>
     <ClInclude Include="..\mupdf\source\fitz\z-imp.h">
       <Filter>mupdf\source\fitz</Filter>
+    </ClInclude>
+    <ClInclude Include="..\mupdf\source\html\css-properties.h">
+      <Filter>mupdf\source\html</Filter>
+    </ClInclude>
+    <ClInclude Include="..\mupdf\source\html\html-imp.h">
+      <Filter>mupdf\source\html</Filter>
     </ClInclude>
     <ClInclude Include="..\mupdf\source\pdf\annotation-icons.h">
       <Filter>mupdf\source\pdf</Filter>
@@ -708,6 +720,15 @@
       <Filter>mupdf\source\html</Filter>
     </ClCompile>
     <ClCompile Include="..\mupdf\source\html\html-parse.c">
+      <Filter>mupdf\source\html</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mupdf\source\html\mobi.c">
+      <Filter>mupdf\source\html</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mupdf\source\html\story-writer.c">
+      <Filter>mupdf\source\html</Filter>
+    </ClCompile>
+    <ClCompile Include="..\mupdf\source\html\xml-dom.c">
       <Filter>mupdf\source\html</Filter>
     </ClCompile>
     <ClCompile Include="..\mupdf\source\pdf\pdf-annot.c">

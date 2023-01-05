@@ -122,7 +122,7 @@ static void open_browser(const char *uri)
 	argv[0] = (char*) browser;
 	argv[1] = (char*) uri;
 	argv[2] = NULL;
-	err = posix_spawn(&pid, browser, NULL, NULL, argv, environ);
+	err = posix_spawnp(&pid, browser, NULL, NULL, argv, environ);
 	if (err)
 		fz_warn(ctx, "cannot spawn browser '%s': %s", browser, strerror(err));
 
@@ -2176,7 +2176,7 @@ void do_console(void)
 					console->write(ctx, "\n> ");
 					console->write(ctx, console_readline.input.text);
 				}
-				pdf_js_execute(pdf->js, "console", console_readline.input.text, &result);
+				pdf_js_execute(pdf ? pdf->js : NULL, "console", console_readline.input.text, &result);
 				if (result && console && console->write)
 				{
 					console->write(ctx, "\n");

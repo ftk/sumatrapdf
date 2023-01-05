@@ -471,22 +471,19 @@ static bool IsSafeAccel(const ACCEL& a) {
     return true;
 }
 
-static ACCEL* gAccels = nullptr;
-static int gAccelsCount = 0;
+ACCEL* gAccels = nullptr;
+int gAccelsCount = 0;
 
-static ACCEL* gSafeAccels = nullptr;
-static int gSafeAccelsCount = 0;
-
-static HACCEL gAccelerators = nullptr;
-static HACCEL gSafeAccelerators = nullptr;
+static HACCEL gAccelTables[3] = {
+    nullptr, // for all but edit and tree view
+    nullptr, // for edit
+    nullptr, // for tree view
+};
 
 /* returns a pointer to HACCEL so that we can update it and message loop will use
 the latest version */
-HACCEL* CreateSumatraAcceleratorTable() {
-    DestroyAcceleratorTable(gAccelerators);
-    DestroyAcceleratorTable(gSafeAccelerators);
-    free(gAccels);
-    free(gSafeAccels);
+static void CreateSumatraAcceleratorTable() {
+    CrashIf(gAccelTables[0] || gAccelTables[1] || gAccelTables[2]);
 
     int nBuiltIn = (int)dimof(gBuiltInAccelerators);
 
@@ -498,10 +495,18 @@ HACCEL* CreateSumatraAcceleratorTable() {
     // build a combined accelerator table of those defined in settings file
     // and built-in shortcuts. Custom shortcuts over-ride built-in
     int nMax = nBuiltIn + nCustomShortcuts;
+    // https://github.com/sumatrapdfreader/sumatrapdf/issues/2981
+    // sizeof(ACCEL) is 6 so odd number will cause treeViewAccels to
+    // be mis-aligined. Rounding to 2 should be enoug, do 4 for extra safety
+    nMax = RoundUp(nMax, 4);
     ACCEL* accels = AllocArray<ACCEL>(nMax);
     int nAccels = 0;
-    ACCEL* safeAccels = AllocArray<ACCEL>(nMax);
-    int nSafeAccels = 0;
+    // perf: only 1 allocation for 2 arrays
+    ACCEL* toFreeAccels = AllocArray<ACCEL>(nMax * 2);
+    ACCEL* editAccels = toFreeAccels;
+    ACCEL* treeViewAccels = toFreeAccels + nMax;
+    int nEditAccels = 0;
+    int nTreeViewAccels = 0;
 
     for (Shortcut* shortcut : *gGlobalPrefs->shortcuts) {
         char* cmd = shortcut->cmd;
@@ -520,7 +525,12 @@ HACCEL* CreateSumatraAcceleratorTable() {
         }
         accels[nAccels++] = accel;
         if (IsSafeAccel(accel)) {
-            safeAccels[nSafeAccels++] = accel;
+            editAccels[nEditAccels++] = accel;
+            treeViewAccels[nTreeViewAccels++] = accel;
+        }
+        if (cmdId == CmdToggleBookmarks && !IsSafeAccel(accel)) {
+            // https://github.com/sumatrapdfreader/sumatrapdf/issues/2832
+            treeViewAccels[nTreeViewAccels++] = accel;
         }
     }
 
@@ -537,24 +547,45 @@ HACCEL* CreateSumatraAcceleratorTable() {
         }
         accels[nAccels++] = accel;
         if (IsSafeAccel(accel)) {
-            safeAccels[nSafeAccels++] = accel;
+            editAccels[nEditAccels++] = accel;
+            treeViewAccels[nTreeViewAccels++] = accel;
         }
     }
 
     gAccels = accels;
     gAccelsCount = nAccels;
-    gSafeAccels = safeAccels;
-    gSafeAccelsCount = nSafeAccels;
 
-    gAccelerators = CreateAcceleratorTableW(gAccels, gAccelsCount);
-    CrashIf(gAccelerators == nullptr);
-    gSafeAccelerators = CreateAcceleratorTableW(gSafeAccels, gSafeAccelsCount);
-    return &gAccelerators;
+    gAccelTables[0] = CreateAcceleratorTableW(gAccels, gAccelsCount);
+    CrashIf(gAccelTables[0] == nullptr);
+    gAccelTables[1] = CreateAcceleratorTableW(editAccels, nEditAccels);
+    CrashIf(gAccelTables[1] == nullptr);
+    gAccelTables[2] = CreateAcceleratorTableW(treeViewAccels, nTreeViewAccels);
+    CrashIf(gAccelTables[2] == nullptr);
+
+    free(toFreeAccels);
 }
 
-HACCEL* GetSafeAcceleratorTable() {
-    CrashIf(!gSafeAccelerators);
-    return &gSafeAccelerators;
+void FreeAcceleratorTables() {
+    DestroyAcceleratorTable(gAccelTables[0]);
+    DestroyAcceleratorTable(gAccelTables[1]);
+    DestroyAcceleratorTable(gAccelTables[2]);
+    gAccelTables[0] = nullptr;
+    gAccelTables[1] = nullptr;
+    gAccelTables[2] = nullptr;
+    free(gAccels);
+    gAccels = nullptr;
+}
+
+void ReCreateSumatraAcceleratorTable() {
+    FreeAcceleratorTables();
+    CreateSumatraAcceleratorTable();
+}
+
+HACCEL* GetAcceleratorTables() {
+    if (gAccelTables[0] == nullptr) {
+        CreateSumatraAcceleratorTable();
+    }
+    return gAccelTables;
 }
 
 bool GetAccelByCmd(int cmdId, ACCEL& accelOut) {
