@@ -140,7 +140,7 @@ EngineImages::EngineImages() {
 
 EngineImages::~EngineImages() {
     EnterCriticalSection(&cacheAccess);
-    for (int i = pageCache.size() - 1; i >= 0; i--) {
+    for (int i = (int)pageCache.size() - 1; i >= 0; i--) {
         ImagePage* lastPage = pageCache.at(i);
         if (lastPage->engine != this)
             continue;
