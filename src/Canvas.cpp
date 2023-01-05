@@ -1286,7 +1286,8 @@ static LRESULT OnGesture(MainWindow* win, UINT msg, WPARAM wp, LPARAM lp) {
                     win->touchState.panStarted = false;
                 } else if (dm) {
                     // pan / scroll
-                    win->MoveDocBy(deltaX, deltaY);
+                    const int touchMultiplier = 2;
+                    win->MoveDocBy(touchMultiplier * deltaX, touchMultiplier * deltaY);
                 }
             }
             break;
